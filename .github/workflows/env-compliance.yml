@@ -1,0 +1,226 @@
+name: 环境变量合规性检查
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  env-compliance:
+    name: 环境变量合规性检查
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 运行环境变量合规性检查
+        run: npm run check-env-compliance
+        continue-on-error: false
+
+      - name: 运行配置验证
+        run: npm run validate-config
+        continue-on-error: true
+
+      - name: 生成合规性报告
+        if: failure()
+        run: |
+          echo "## 🚨 环境变量合规性检查失败" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "发现了不符合 COSEREEDEN_ 前缀规范的环境变量或硬编码配置。" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 修复建议" >> $GITHUB_STEP_SUMMARY
+          echo "1. 将所有环境变量更新为使用 COSEREEDEN_ 前缀" >> $GITHUB_STEP_SUMMARY
+          echo "2. 移除硬编码的敏感信息" >> $GITHUB_STEP_SUMMARY
+          echo "3. 使用 \`src/lib/config/env-compatibility.ts\` 工具进行兼容性处理" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 详细信息" >> $GITHUB_STEP_SUMMARY
+          echo "请查看上方的检查输出获取具体的违规项目。" >> $GITHUB_STEP_SUMMARY
+
+      - name: 合规性检查通过
+        if: success()
+        run: |
+          echo "## ✅ 环境变量合规性检查通过" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "所有环境变量都符合 COSEREEDEN_ 前缀规范，没有发现硬编码配置问题。" >> $GITHUB_STEP_SUMMARY
+
+  type-check:
+    name: TypeScript 类型检查
+    runs-on: ubuntu-latest
+    needs: env-compliance
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 运行类型检查
+        run: npm run type-check
+
+  lint:
+    name: ESLint 代码检查
+    runs-on: ubuntu-latest
+    needs: env-compliance
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 运行 ESLint
+        run: npm run lint
+
+  security-audit:
+    name: 安全审计
+    runs-on: ubuntu-latest
+    needs: env-compliance
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 运行安全审计
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: 检查敏感文件
+        run: |
+          echo "检查是否存在敏感文件..."
+          if [ -f ".env" ]; then
+            echo "❌ 发现 .env 文件，请确保不要提交敏感信息"
+            exit 1
+          fi
+          if [ -f ".env.local" ]; then
+            echo "❌ 发现 .env.local 文件，请确保不要提交敏感信息"
+            exit 1
+          fi
+          if [ -f ".env.production" ]; then
+            echo "❌ 发现 .env.production 文件，请确保不要提交敏感信息"
+            exit 1
+          fi
+          echo "✅ 未发现敏感文件"
+
+  config-validation:
+    name: 配置验证
+    runs-on: ubuntu-latest
+    needs: env-compliance
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 验证 package.json
+        run: |
+          echo "验证 package.json 配置..."
+          node -e "
+            const pkg = require('./package.json');
+            const scripts = pkg.scripts || {};
+
+            // 检查必需的脚本
+            const requiredScripts = ['check-env-compliance', 'type-check', 'lint'];
+            const missing = requiredScripts.filter(script => !scripts[script]);
+
+            if (missing.length > 0) {
+              console.error('❌ 缺少必需的脚本:', missing.join(', '));
+              process.exit(1);
+            }
+
+            console.log('✅ package.json 配置验证通过');
+          "
+
+      - name: 验证 TypeScript 配置
+        run: |
+          echo "验证 TypeScript 配置..."
+          if [ ! -f "tsconfig.json" ]; then
+            echo "❌ 缺少 tsconfig.json 文件"
+            exit 1
+          fi
+          echo "✅ TypeScript 配置验证通过"
+
+      - name: 验证 ESLint 配置
+        run: |
+          echo "验证 ESLint 配置..."
+          if [ ! -f ".eslintrc.json" ] && [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ]; then
+            echo "❌ 缺少 ESLint 配置文件"
+            exit 1
+          fi
+          echo "✅ ESLint 配置验证通过"
+
+  summary:
+    name: 检查总结
+    runs-on: ubuntu-latest
+    needs: [env-compliance, type-check, lint, security-audit, config-validation]
+    if: always()
+
+    steps:
+      - name: 生成检查总结
+        run: |
+          echo "## 🎯 CI/CD 检查总结" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 检查项目 | 状态 |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 环境变量合规性 | ${{ needs.env-compliance.result == 'success' && '✅ 通过' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| TypeScript 类型检查 | ${{ needs.type-check.result == 'success' && '✅ 通过' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ESLint 代码检查 | ${{ needs.lint.result == 'success' && '✅ 通过' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 安全审计 | ${{ needs.security-audit.result == 'success' && '✅ 通过' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 配置验证 | ${{ needs.config-validation.result == 'success' && '✅ 通过' || '❌ 失败' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.env-compliance.result }}" == "success" &&
+                "${{ needs.type-check.result }}" == "success" &&
+                "${{ needs.lint.result }}" == "success" &&
+                "${{ needs.security-audit.result }}" == "success" &&
+                "${{ needs.config-validation.result }}" == "success" ]]; then
+            echo "### 🎉 所有检查都通过了！" >> $GITHUB_STEP_SUMMARY
+            echo "代码质量符合 CoserEden 项目标准。" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⚠️ 部分检查未通过" >> $GITHUB_STEP_SUMMARY
+            echo "请查看上方的详细信息并修复相关问题。" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,0 +1,1685 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String                       @id @default(cuid())
+  username                String                       @unique
+  email                   String?
+  passwordHash            String?                      @map("password_hash")
+  displayName             String?                      @map("display_name")
+  bio                     String?
+  avatarUrl               String?                      @map("avatar_url")
+  bannerUrl               String?                      @map("banner_url")
+  location                String?
+  website                 String?
+  birthday                DateTime?
+  points                  Int                          @default(0)
+  userLevel               String                       @default("USER") @map("user_level")
+  isVerified              Boolean                      @default(false) @map("is_verified")
+  isActive                Boolean                      @default(true) @map("is_active")
+  canPublish              Boolean                      @default(false) @map("can_publish")
+  isTestData              Boolean                      @default(false) @map("is_test_data")
+  registrationStatus      String                       @default("COMPLETED") @map("registration_status")
+  emailSendAttempts       Int                          @default(0) @map("email_send_attempts")
+  lastEmailSentAt         DateTime?                    @map("last_email_sent_at")
+  emailVerified           DateTime?                    @map("email_verified")
+  notificationSettings    String?                      @map("notification_settings")
+  lastActiveAt            DateTime?                    @map("last_active_at")
+  approvalStatus          String                       @default("APPROVED") @map("approval_status")
+  approvedAt              DateTime?                    @map("approved_at")
+  approvedBy              String?                      @map("approved_by")
+  rejectedAt              DateTime?                    @map("rejected_at")
+  rejectedBy              String?                      @map("rejected_by")
+  rejectionReason         String?                      @map("rejection_reason")
+  postsCount              Int                          @default(0) @map("posts_count")
+  followersCount          Int                          @default(0) @map("followers_count")
+  followingCount          Int                          @default(0) @map("following_count")
+  likeCount               Int                          @default(0) @map("like_count")
+  profileVisibility       String                       @default("PUBLIC") @map("profile_visibility")
+  showVisitorHistory      Boolean                      @default(true) @map("show_visitor_history")
+  showSocialLinks         Boolean                      @default(true) @map("show_social_links")
+  allowDirectMessages     String                       @default("EVERYONE") @map("allow_direct_messages")
+  mentionPrivacy          String                       @default("PUBLIC") @map("mention_privacy")
+  lastLoginAt             DateTime?                    @map("last_login_at")
+  lastLoginIp             String?                      @map("last_login_ip")
+  createdAt               DateTime                     @default(now()) @map("created_at")
+  updatedAt               DateTime                     @updatedAt @map("updated_at")
+  accounts                Account[]
+  adminApprovalHistory    ApprovalHistory[]            @relation("ApprovalHistoryAdmin")
+  approvalHistory         ApprovalHistory[]            @relation("ApprovalHistoryUser")
+  auditLogs               AuditLog[]
+  cansConfigHistories     CansConfigHistory[]
+  cansTransactionsRelated CansTransaction[]            @relation("CansTransactionRelated")
+  cansTransactions        CansTransaction[]
+  commentLikes            CommentLike[]
+  reactionConfigsCreated  CommentReactionConfig[]      @relation("ReactionConfigCreator")
+  reactionConfigsUpdated  CommentReactionConfig[]      @relation("ReactionConfigUpdater")
+  comments                Comment[]
+  commentDeletions        Comment[]                    @relation("CommentDeleter")
+  commentReviews          Comment[]                    @relation("CommentReviewer")
+  dailyCheckins           DailyCheckin[]
+  downloadAccessLogs      DownloadAccessLog[]
+  downloadAccessTokens    DownloadAccessToken[]
+  downloadLinks           DownloadLink[]
+  downloadPurchases       DownloadPurchase[]
+  drafts                  Draft[]
+  emailTemplates          EmailTemplate[]
+  featuredContents        FeaturedContent[]
+  following               Follow[]                     @relation("UserFollowing")
+  followers               Follow[]                     @relation("UserFollowers")
+  inviteeRelationships    InvitationRelationship[]     @relation("UserInvitee")
+  inviterRelationships    InvitationRelationship[]     @relation("UserInviter")
+  likes                   Like[]
+  mentionRecordsReceived  MentionRecord[]              @relation("MentionedUser")
+  mentionRecordsGiven     MentionRecord[]              @relation("MentionerUser")
+  notificationDeliveries  NotificationDelivery[]
+  notifications           Notification[]
+  posts                   Post[]
+  profileVisitors         ProfileVisitor[]             @relation("ProfileOwner")
+  visitHistory            ProfileVisitor[]             @relation("ProfileVisitor")
+  sessions                Session[]
+  siteVisits              SiteVisitor[]                @relation("SiteVisitor")
+  tagWatches              TagWatch[]
+  taskCompletions         TaskCompletion[]
+  timeoutNotifications    TimeoutNotification[]        @relation("TimeoutNotifications")
+  transactionMetrics      TransactionMetrics[]         @relation("TransactionMetrics")
+  turnstileConfigs        TurnstileConfig[]
+  uploadSessions          UploadSession[]
+  uploadTransactions      UploadTransaction[]          @relation("UploadTransactions")
+  approvedUsers           UserApprovalLog[]            @relation("ApprovalAdmin")
+  approvalLogs            UserApprovalLog[]
+  cansAccount             UserCansAccount?
+  mentionStats            UserMentionStats?
+  mentionsReceived        UserMention[]                @relation("UserMentioned")
+  mentionsGiven           UserMention[]                @relation("UserMentioner")
+  notificationPreferences UserNotificationPreference[]
+  invitedUsers            UserRegistrationSource[]     @relation("UserInviter")
+  registrationSource      UserRegistrationSource?      @relation("UserRegistrationSource")
+  userSessions            UserSession[]
+  socialLinks             UserSocialLink[]
+  videoPlayStats          VideoPlayStats[]
+
+  @@unique([email, registrationStatus], name: "unique_email_completed_registration")
+  @@index([userLevel, isActive])
+  @@index([userLevel, isVerified])
+  @@index([approvalStatus, createdAt])
+  @@index([email, isActive])
+  @@index([username, isActive])
+  @@index([createdAt])
+  @@index([userLevel, isVerified, isActive])
+  @@index([isActive, lastActiveAt])
+  @@index([registrationStatus, emailSendAttempts])
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String    @unique
+  expires    DateTime
+  used       Boolean   @default(false)
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([identifier, token])
+  @@map("verificationtokens")
+}
+
+model Post {
+  id                 String              @id @default(cuid())
+  title              String
+  content            String?
+  excerpt            String?
+  description        String?
+  postType           String              @default("TEXT") @map("post_type")
+  contentType        String              @default("POST") @map("content_type")
+  images             String?
+  videos             String?
+  coverImage         String?             @map("cover_image")
+  authorId           String              @map("author_id")
+  category           String?
+  tags               String?
+  mentions           String?
+  viewCount          Int                 @default(0) @map("view_count")
+  likeCount          Int                 @default(0) @map("like_count")
+  commentCount       Int                 @default(0) @map("comment_count")
+  isPublic           Boolean             @default(true) @map("is_public")
+  isPremium          Boolean             @default(false) @map("is_premium")
+  visibility         String              @default("PUBLIC")
+  isDraft            Boolean             @default(true) @map("is_draft")
+  isTestData         Boolean             @default(false) @map("is_test_data")
+  isDeleted          Boolean             @default(false) @map("is_deleted")
+  deletedAt          DateTime?           @map("deleted_at")
+  deletedBy          String?             @map("deleted_by")
+  deletionReason     String?             @map("deletion_reason")
+  publishedAt        DateTime?           @map("published_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  comments           Comment[]
+  heatScore          ContentHeatScore?
+  downloadAccessLogs DownloadAccessLog[]
+  downloadLinks      DownloadLink[]
+  featuredContents   FeaturedContent[]
+  likes              Like[]
+  media              PostMedia[]
+  author             User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  userMentions       UserMention[]
+
+  @@index([authorId, publishedAt])
+  @@index([isPublic, publishedAt])
+  @@index([contentType, publishedAt])
+  @@index([isPublic, category, publishedAt])
+  @@index([likeCount, viewCount, publishedAt])
+  @@index([authorId, isPublic, publishedAt])
+  @@index([visibility, publishedAt])
+  @@index([isPremium, isPublic])
+  @@index([isDeleted, publishedAt])
+  @@index([isDeleted, authorId])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@map("posts")
+}
+
+model PostMedia {
+  id               String                @id @default(cuid())
+  postId           String?               @map("post_id")
+  filename         String
+  originalName     String                @map("original_name")
+  mimeType         String                @map("mime_type")
+  fileSize         Int                   @map("file_size")
+  fileHash         String?               @map("file_hash")
+  uploadedBy       String?               @map("uploaded_by")
+  mediaType        String                @map("media_type")
+  url              String
+  thumbnailUrl     String?               @map("thumbnail_url")
+  smallUrl         String?               @map("small_url")
+  mediumUrl        String?               @map("medium_url")
+  largeUrl         String?               @map("large_url")
+  compressedUrl    String?               @map("compressed_url")
+  width            Int?
+  height           Int?
+  duration         Int?
+  aspectRatio      Float?                @map("aspect_ratio")
+  videoCodec       String?               @map("video_codec")
+  audioCodec       String?               @map("audio_codec")
+  bitrate          Int?
+  frameRate        Float?                @map("frame_rate")
+  resolution       String?
+  isTranscoded     Boolean               @default(false) @map("is_transcoded")
+  originalCodec    String?               @map("original_codec")
+  transcodedAt     DateTime?             @map("transcoded_at")
+  order            Int                   @default(0)
+  caption          String?
+  altText          String?               @map("alt_text")
+  isProcessed      Boolean               @default(false) @map("is_processed")
+  processingStatus String                @default("PENDING") @map("processing_status")
+  storageProvider  String?               @map("storage_provider")
+  storageKey       String?               @map("storage_key")
+  storageBucket    String?               @map("storage_bucket")
+  cdnUrl           String?               @map("cdn_url")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+  processingJobs   MediaProcessingJob[]
+  processingTasks  MediaProcessingTask[]
+  post             Post?                 @relation(fields: [postId], references: [id], onDelete: Cascade)
+  playStats        VideoPlayStats[]
+
+  @@index([postId])
+  @@index([mediaType])
+  @@index([isProcessed])
+  @@index([processingStatus])
+  @@index([createdAt])
+  @@index([fileHash])
+  @@map("post_media")
+}
+
+model Draft {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  content       String?
+  visibility    String    @default("PUBLIC")
+  allowComments Boolean   @default(true) @map("allow_comments")
+  allowDownload Boolean   @default(false) @map("allow_download")
+  mediaIds      String[]  @map("media_ids")
+  tags          String[]
+  downloadLinks Json?     @map("download_links")
+  editingPostId String?   @map("editing_post_id")
+  authorId      String    @map("author_id")
+  isDeleted     Boolean   @default(false) @map("is_deleted")
+  deletedAt     DateTime? @map("deleted_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  author        User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([authorId])
+  @@index([isDeleted])
+  @@index([editingPostId])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@map("drafts")
+}
+
+model FileHash {
+  id            String   @id @default(cuid())
+  hash          String   @unique
+  filename      String
+  mimeType      String   @map("mime_type")
+  fileSize      Int      @map("file_size")
+  url           String
+  uploadCount   Int      @default(1) @map("upload_count")
+  width         Int?
+  height        Int?
+  duration      Int?
+  firstUploadAt DateTime @default(now()) @map("first_upload_at")
+  lastUploadAt  DateTime @default(now()) @map("last_upload_at")
+
+  @@map("file_hashes")
+}
+
+model StorageMonitoring {
+  id              String   @id @default(cuid())
+  diskPath        String   @map("disk_path")
+  totalSpace      BigInt   @map("total_space")
+  usedSpace       BigInt   @map("used_space")
+  freeSpace       BigInt   @map("free_space")
+  usagePercentage Float    @map("usage_percentage")
+  directoryData   String   @map("directory_data")
+  timestamp       DateTime @default(now())
+
+  @@index([timestamp])
+  @@map("storage_monitoring")
+}
+
+model StorageAlert {
+  id            String   @id @default(cuid())
+  level         String
+  message       String
+  diskInfo      String   @map("disk_info")
+  directoryInfo String   @map("directory_info")
+  resolved      Boolean  @default(false)
+  timestamp     DateTime @default(now())
+
+  @@index([level])
+  @@index([resolved])
+  @@index([timestamp])
+  @@map("storage_alerts")
+}
+
+model CleanupReport {
+  id                String   @id @default(cuid())
+  totalFilesScanned Int      @map("total_files_scanned")
+  totalFilesDeleted Int      @map("total_files_deleted")
+  totalSpaceFreed   BigInt   @map("total_space_freed")
+  taskResults       String   @map("task_results")
+  duration          Int
+  success           Boolean
+  timestamp         DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([success])
+  @@map("cleanup_reports")
+}
+
+model Comment {
+  id              String        @id @default(cuid())
+  postId          String        @map("post_id")
+  authorId        String?       @map("author_id")
+  parentId        String?       @map("parent_id")
+  content         String
+  mentions        String?
+  isDeleted       Boolean       @default(false) @map("is_deleted")
+  isTestData      Boolean       @default(false) @map("is_test_data")
+  guestName       String?       @map("guest_name")
+  guestContact    String?       @map("guest_contact")
+  guestIp         String?       @map("guest_ip")
+  guestSessionId  String?       @map("guest_session_id")
+  status          String        @default("PENDING")
+  rejectionReason String?       @map("rejection_reason")
+  reviewedBy      String?       @map("reviewed_by")
+  reviewedAt      DateTime?     @map("reviewed_at")
+  isPinned        Boolean       @default(false) @map("is_pinned")
+  deletedBy       String?       @map("deleted_by")
+  deletedAt       DateTime?     @map("deleted_at")
+  deletionReason  String?       @map("deletion_reason")
+  likeCount       Int           @default(0) @map("like_count")
+  replyCount      Int           @default(0) @map("reply_count")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  likes           CommentLike[]
+  author          User?         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  deleter         User?         @relation("CommentDeleter", fields: [deletedBy], references: [id])
+  parent          Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies         Comment[]     @relation("CommentReplies")
+  post            Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reviewer        User?         @relation("CommentReviewer", fields: [reviewedBy], references: [id])
+  userMentions    UserMention[]
+
+  @@index([postId])
+  @@index([authorId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([reviewedAt])
+  @@index([postId, parentId, createdAt])
+  @@index([authorId, createdAt])
+  @@index([postId, isDeleted, createdAt])
+  @@map("comments")
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String   @map("follower_id")
+  followingId String   @map("following_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  follower    User     @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@map("follows")
+}
+
+model Like {
+  id           String   @id @default(cuid())
+  postId       String   @map("post_id")
+  userId       String   @map("user_id")
+  reactionType String   @default("HEART") @map("reaction_type")
+  isTestData   Boolean  @default(false) @map("is_test_data")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  post         Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@map("likes")
+}
+
+model CommentLike {
+  id           String   @id @default(cuid())
+  commentId    String   @map("comment_id")
+  userId       String   @map("user_id")
+  reactionType String   @default("HEART") @map("reaction_type")
+  isTestData   Boolean  @default(false) @map("is_test_data")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  comment      Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@map("comment_likes")
+}
+
+model CommentReactionConfig {
+  id            String   @id @default(cuid())
+  likeWeight    Int      @default(1) @map("like_weight")
+  dislikeWeight Int      @default(-3) @map("dislike_weight")
+  enableLike    Boolean  @default(true) @map("enable_like")
+  enableDislike Boolean  @default(true) @map("enable_dislike")
+  showCounts    Boolean  @default(true) @map("show_counts")
+  description   String?  @map("description")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdBy     String?  @map("created_by")
+  updatedBy     String?  @map("updated_by")
+  creator       User?    @relation("ReactionConfigCreator", fields: [createdBy], references: [id])
+  updater       User?    @relation("ReactionConfigUpdater", fields: [updatedBy], references: [id])
+
+  @@map("comment_reaction_configs")
+}
+
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  category    String   @default("general")
+  isPublic    Boolean  @default(false) @map("is_public")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  action     String
+  level      String   @default("INFO")
+  message    String
+  details    String?
+  resource   String?
+  resourceId String?  @map("resource_id")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  sessionId  String?  @map("session_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([level])
+  @@index([createdAt])
+  @@index([ipAddress])
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([level, createdAt])
+  @@map("audit_logs")
+}
+
+model LoginAttempt {
+  id            String   @id @default(cuid())
+  identifier    String
+  attemptCount  Int      @default(1) @map("attempt_count")
+  lastAttemptAt DateTime @default(now()) @map("last_attempt_at")
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([identifier])
+  @@index([ipAddress])
+  @@index([lastAttemptAt])
+  @@map("login_attempts")
+}
+
+model UserSession {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  sessionToken String   @unique @map("session_token")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  isActive     Boolean  @default(true) @map("is_active")
+  expiresAt    DateTime @map("expires_at")
+  lastUsedAt   DateTime @default(now()) @map("last_used_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionToken])
+  @@index([expiresAt])
+  @@index([isActive])
+  @@map("user_sessions")
+}
+
+model VideoPlayStats {
+  id             String    @id @default(cuid())
+  mediaId        String    @map("media_id")
+  userId         String?   @map("user_id")
+  playDuration   Int       @map("play_duration")
+  totalDuration  Int       @map("total_duration")
+  completionRate Float     @map("completion_rate")
+  userAgent      String?   @map("user_agent")
+  browser        String?
+  device         String?
+  resolution     String?
+  loadTime       Int?      @map("load_time")
+  bufferCount    Int?      @map("buffer_count")
+  errorCount     Int?      @map("error_count")
+  playedAt       DateTime  @default(now()) @map("played_at")
+  media          PostMedia @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  user           User?     @relation(fields: [userId], references: [id])
+
+  @@index([mediaId])
+  @@index([userId])
+  @@index([playedAt])
+  @@map("video_play_stats")
+}
+
+model MediaProcessingTask {
+  id           String    @id @default(cuid())
+  mediaId      String    @map("media_id")
+  taskType     String    @map("task_type")
+  status       String    @default("PENDING")
+  inputPath    String    @map("input_path")
+  outputPath   String?   @map("output_path")
+  options      String?
+  progress     Float     @default(0)
+  errorMessage String?   @map("error_message")
+  startedAt    DateTime? @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  duration     Int?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  media        PostMedia @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@index([mediaId])
+  @@index([status])
+  @@index([taskType])
+  @@index([createdAt])
+  @@map("media_processing_tasks")
+}
+
+model UserSocialLink {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  platform    String
+  username    String
+  url         String
+  isPublic    Boolean  @default(true) @map("is_public")
+  order       Int      @default(0)
+  customTitle String?  @map("custom_title")
+  customIcon  String?  @map("custom_icon")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform])
+  @@index([userId])
+  @@index([platform])
+  @@map("user_social_links")
+}
+
+model ProfileVisitor {
+  id          String   @id @default(cuid())
+  profileId   String   @map("profile_id")
+  visitorId   String?  @map("visitor_id")
+  visitorIp   String?  @map("visitor_ip")
+  userAgent   String?  @map("user_agent")
+  visitedAt   DateTime @default(now()) @map("visited_at")
+  visitorType String   @map("visitor_type")
+  profile     User     @relation("ProfileOwner", fields: [profileId], references: [id], onDelete: Cascade)
+  visitor     User?    @relation("ProfileVisitor", fields: [visitorId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@index([visitorId])
+  @@index([visitedAt])
+  @@index([visitorType])
+  @@map("profile_visitors")
+}
+
+model SiteVisitor {
+  id          String   @id @default(cuid())
+  visitorId   String?  @map("visitor_id")
+  visitorIp   String   @map("visitor_ip")
+  userAgent   String?  @map("user_agent")
+  visitedAt   DateTime @default(now()) @map("visited_at")
+  page        String?  @map("page")
+  referrer    String?  @map("referrer")
+  country     String?  @map("country")
+  city        String?  @map("city")
+  device      String?  @map("device")
+  browser     String?  @map("browser")
+  visitorType String   @map("visitor_type")
+  visitor     User?    @relation("SiteVisitor", fields: [visitorId], references: [id], onDelete: Cascade)
+
+  @@index([visitorId])
+  @@index([visitorIp])
+  @@index([visitedAt])
+  @@index([visitorType])
+  @@index([page])
+  @@map("site_visitors")
+}
+
+model UserRegistrationSource {
+  id         String    @id @default(cuid())
+  userId     String    @unique @map("user_id")
+  referrer   String?   @map("referrer")
+  invitedBy  String?   @map("invited_by")
+  campaign   String?   @map("campaign")
+  medium     String?   @map("medium")
+  source     String?   @map("source")
+  visitCount Int       @default(0) @map("visit_count")
+  firstVisit DateTime? @map("first_visit")
+  lastVisit  DateTime? @map("last_visit")
+  country    String?   @map("country")
+  city       String?   @map("city")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  inviter    User?     @relation("UserInviter", fields: [invitedBy], references: [id])
+  user       User      @relation("UserRegistrationSource", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([invitedBy])
+  @@index([source])
+  @@index([campaign])
+  @@map("user_registration_sources")
+}
+
+model UserMention {
+  id          String    @id @default(cuid())
+  mentionerId String    @map("mentioner_id")
+  mentionedId String    @map("mentioned_id")
+  postId      String?   @map("post_id")
+  commentId   String?   @map("comment_id")
+  mentionType String    @map("mention_type")
+  context     String?
+  position    Int?
+  isRead      Boolean   @default(false) @map("is_read")
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  comment     Comment?  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  mentioned   User      @relation("UserMentioned", fields: [mentionedId], references: [id], onDelete: Cascade)
+  mentioner   User      @relation("UserMentioner", fields: [mentionerId], references: [id], onDelete: Cascade)
+  post        Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([mentionedId])
+  @@index([mentionerId])
+  @@index([postId])
+  @@index([commentId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("user_mentions")
+}
+
+model UserPermissionConfig {
+  id                       String   @id @default(cuid())
+  userLevel                String   @unique @map("user_level")
+  canPublishMoments        Boolean  @default(false) @map("can_publish_moments")
+  canPublishPosts          Boolean  @default(false) @map("can_publish_posts")
+  dailyMomentsLimit        Int      @default(0) @map("daily_moments_limit")
+  dailyPostsLimit          Int      @default(0) @map("daily_posts_limit")
+  canUploadImages          Boolean  @default(false) @map("can_upload_images")
+  canUploadVideos          Boolean  @default(false) @map("can_upload_videos")
+  maxImagesPerUpload       Int      @default(0) @map("max_images_per_upload")
+  maxVideosPerUpload       Int      @default(0) @map("max_videos_per_upload")
+  momentMinLength          Int      @default(1) @map("moment_min_length")
+  momentMaxLength          Int      @default(500) @map("moment_max_length")
+  canViewPosts             Boolean  @default(true) @map("can_view_posts")
+  canViewProfiles          Boolean  @default(true) @map("can_view_profiles")
+  canViewComments          Boolean  @default(true) @map("can_view_comments")
+  canPlayVideos            Boolean  @default(true) @map("can_play_videos")
+  canDownloadImages        Boolean  @default(true) @map("can_download_images")
+  canSearchContent         Boolean  @default(true) @map("can_search_content")
+  canViewTags              Boolean  @default(true) @map("can_view_tags")
+  canLikePosts             Boolean  @default(false) @map("can_like_posts")
+  canComment               Boolean  @default(false) @map("can_comment")
+  canFollow                Boolean  @default(false) @map("can_follow")
+  canShare                 Boolean  @default(true) @map("can_share")
+  requiresCommentApproval  Boolean  @default(true) @map("requires_comment_approval")
+  canCommentWithImages     Boolean  @default(false) @map("can_comment_with_images")
+  dailyCommentLimit        Int      @default(10) @map("daily_comment_limit")
+  requireLoginForPosts     Boolean  @default(false) @map("require_login_for_posts")
+  requireLoginForProfiles  Boolean  @default(false) @map("require_login_for_profiles")
+  requireLoginForVideos    Boolean  @default(false) @map("require_login_for_videos")
+  mediaAccessPercentage    Int      @default(100) @map("media_access_percentage")
+  canViewRestrictedPreview Boolean  @default(false) @map("can_view_restricted_preview")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  @@map("user_permission_configs")
+}
+
+model FeaturedContent {
+  id          String    @id @default(cuid())
+  contentId   String?   @map("content_id")
+  contentType String    @map("content_type")
+  title       String?
+  description String?
+  coverImage  String?   @map("cover_image")
+  position    Int       @default(0)
+  isActive    Boolean   @default(true) @map("is_active")
+  startDate   DateTime? @map("start_date")
+  endDate     DateTime? @map("end_date")
+  adminId     String    @map("admin_id")
+  reason      String?
+  viewCount   Int       @default(0) @map("view_count")
+  clickCount  Int       @default(0) @map("click_count")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  admin       User      @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  content     Post?     @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@index([position])
+  @@index([isActive])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([contentType])
+  @@map("featured_contents")
+}
+
+model ContentHeatScore {
+  id              String   @id @default(cuid())
+  contentId       String   @unique @map("content_id")
+  contentType     String   @map("content_type")
+  heatScore       Float    @default(0) @map("heat_score")
+  baseScore       Float    @default(0) @map("base_score")
+  timeDecayFactor Float    @default(1.0) @map("time_decay_factor")
+  likeCount       Int      @default(0) @map("like_count")
+  commentCount    Int      @default(0) @map("comment_count")
+  shareCount      Int      @default(0) @map("share_count")
+  viewCount       Int      @default(0) @map("view_count")
+  calculatedAt    DateTime @default(now()) @map("calculated_at")
+  publishedAt     DateTime @map("published_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  content         Post     @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@index([heatScore])
+  @@index([contentType])
+  @@index([calculatedAt])
+  @@index([publishedAt])
+  @@map("content_heat_scores")
+}
+
+model UserCansAccount {
+  id                    String            @id @default(cuid())
+  userId                String            @unique @map("user_id")
+  totalCans             Int               @default(0) @map("total_cans")
+  availableCans         Int               @default(0) @map("available_cans")
+  frozenCans            Int               @default(0) @map("frozen_cans")
+  totalExperience       Int               @default(0) @map("total_experience")
+  dailyExperienceEarned Int               @default(0) @map("daily_experience_earned")
+  dailyExperienceLimit  Int               @default(100) @map("daily_experience_limit")
+  lastExperienceReset   DateTime          @default(now()) @map("last_experience_reset")
+  totalCheckins         Int               @default(0) @map("total_checkins")
+  consecutiveCheckins   Int               @default(0) @map("consecutive_checkins")
+  lastCheckinDate       DateTime?         @map("last_checkin_date")
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+  transactions          CansTransaction[]
+  checkins              DailyCheckin[]
+  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_cans_accounts")
+}
+
+model CansSystemConfig {
+  id                    String   @id @default(cuid())
+  userLevel             String   @unique @map("user_level")
+  dailySigninCans       Int      @default(10) @map("daily_signin_cans")
+  consecutiveBonus      String   @map("consecutive_bonus")
+  likeCans              Int      @default(2) @map("like_cans")
+  commentCans           Int      @default(5) @map("comment_cans")
+  shareCans             Int      @default(8) @map("share_cans")
+  publishMomentCans     Int      @default(15) @map("publish_moment_cans")
+  publishPostCans       Int      @default(30) @map("publish_post_cans")
+  dailyLikeLimit        Int      @default(20) @map("daily_like_limit")
+  dailyCommentLimit     Int      @default(10) @map("daily_comment_limit")
+  dailyShareLimit       Int      @default(5) @map("daily_share_limit")
+  dailyMomentLimit      Int      @default(3) @map("daily_moment_limit")
+  dailyPostLimit        Int      @default(2) @map("daily_post_limit")
+  beLikedCans           Int      @default(1) @map("be_liked_cans")
+  beCommentedCans       Int      @default(3) @map("be_commented_cans")
+  beSharedCans          Int      @default(5) @map("be_shared_cans")
+  dailyExperienceLimit  Int      @default(100) @map("daily_experience_limit")
+  cansToExperienceRatio Float    @default(1.0) @map("cans_to_experience_ratio")
+  canUseSocialLinks     Boolean  @default(true) @map("can_use_social_links")
+  maxSocialLinks        Int      @default(10) @map("max_social_links")
+  canUseCustomLinks     Boolean  @default(true) @map("can_use_custom_links")
+  allowedReactions      String   @default("[\"HEART\",\"THUMBS_UP\"]") @map("allowed_reactions")
+  isActive              Boolean  @default(true) @map("is_active")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@index([userLevel])
+  @@map("cans_system_configs")
+}
+
+model CansTransaction {
+  id               String          @id @default(cuid())
+  userId           String          @map("user_id")
+  accountId        String          @map("account_id")
+  transactionType  String          @map("transaction_type")
+  amount           Int
+  sourceType       String          @map("source_type")
+  sourceId         String?         @map("source_id")
+  description      String
+  experienceEarned Int             @default(0) @map("experience_earned")
+  relatedUserId    String?         @map("related_user_id")
+  metadata         String?
+  createdAt        DateTime        @default(now()) @map("created_at")
+  account          UserCansAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  relatedUser      User?           @relation("CansTransactionRelated", fields: [relatedUserId], references: [id])
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([transactionType])
+  @@index([sourceType])
+  @@index([createdAt])
+  @@index([userId, transactionType, createdAt])
+  @@map("cans_transactions")
+}
+
+model DailyCheckin {
+  id              String          @id @default(cuid())
+  userId          String          @map("user_id")
+  accountId       String          @map("account_id")
+  checkinDate     DateTime        @map("checkin_date")
+  consecutiveDays Int             @map("consecutive_days")
+  cansEarned      Int             @map("cans_earned")
+  bonusCans       Int             @default(0) @map("bonus_cans")
+  totalCans       Int             @map("total_cans")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  account         UserCansAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, checkinDate])
+  @@index([userId])
+  @@index([checkinDate])
+  @@index([userId, checkinDate])
+  @@map("daily_checkins")
+}
+
+model TaskCompletion {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  taskType      String   @map("task_type")
+  targetId      String?  @map("target_id")
+  cansEarned    Int      @map("cans_earned")
+  completedDate DateTime @map("completed_date")
+  dailyCount    Int      @map("daily_count")
+  metadata      String?  @map("metadata")
+  createdAt     DateTime @default(now()) @map("created_at")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([taskType])
+  @@index([completedDate])
+  @@index([userId, taskType, completedDate])
+  @@map("task_completions")
+}
+
+model CansConfigHistory {
+  id            String   @id @default(cuid())
+  userLevel     String   @map("user_level")
+  changedBy     String   @map("changed_by")
+  changeType    String   @map("change_type")
+  oldConfig     String   @map("old_config")
+  newConfig     String   @map("new_config")
+  reason        String?  @map("reason")
+  notes         String?  @map("notes")
+  createdAt     DateTime @default(now()) @map("created_at")
+  changedByUser User     @relation(fields: [changedBy], references: [id], onDelete: Cascade)
+
+  @@index([userLevel])
+  @@index([changedBy])
+  @@index([createdAt])
+  @@index([userLevel, createdAt])
+  @@map("cans_config_histories")
+}
+
+model InvitationRelationship {
+  id              String    @id @default(cuid())
+  inviterId       String    @map("inviter_id")
+  inviteeId       String    @map("invitee_id")
+  inviteCode      String    @map("invite_code")
+  inviteType      String    @default("REGISTRATION") @map("invite_type")
+  inviterReward   Int       @default(0) @map("inviter_reward")
+  inviteeReward   Int       @default(0) @map("invitee_reward")
+  isRewardClaimed Boolean   @default(false) @map("is_reward_claimed")
+  status          String    @default("PENDING")
+  invitedAt       DateTime  @default(now()) @map("invited_at")
+  completedAt     DateTime? @map("completed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  invitee         User      @relation("UserInvitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+  inviter         User      @relation("UserInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@unique([inviterId, inviteeId])
+  @@index([inviteCode])
+  @@index([inviterId])
+  @@index([inviteeId])
+  @@index([status])
+  @@map("invitation_relationships")
+}
+
+model TagWatch {
+  id              String    @id @default(cuid())
+  userId          String    @map("user_id")
+  tagName         String    @map("tag_name")
+  isActive        Boolean   @default(true) @map("is_active")
+  notifyOnNewPost Boolean   @default(true) @map("notify_on_new_post")
+  watchCount      Int       @default(0) @map("watch_count")
+  lastViewedAt    DateTime? @map("last_viewed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tagName])
+  @@index([userId])
+  @@index([tagName])
+  @@index([isActive])
+  @@map("tag_watches")
+}
+
+model DownloadLink {
+  id            String                @id @default(cuid())
+  postId        String                @map("post_id")
+  userId        String                @map("user_id")
+  platform      String
+  url           String
+  extractCode   String?               @map("extract_code")
+  cansPrice     Int                   @default(0) @map("cans_price")
+  title         String
+  description   String?
+  isActive      Boolean               @default(true) @map("is_active")
+  sortOrder     Int                   @default(0) @map("sort_order")
+  downloadCount Int                   @default(0) @map("download_count")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+  deletedAt     DateTime?             @map("deleted_at")
+  accessLogs    DownloadAccessLog[]
+  accessTokens  DownloadAccessToken[]
+  post          Post                  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purchases     DownloadPurchase[]
+
+  @@index([postId])
+  @@index([userId])
+  @@index([platform])
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("download_links")
+}
+
+model DownloadPurchase {
+  id             String                @id @default(cuid())
+  userId         String                @map("user_id")
+  downloadLinkId String                @map("download_link_id")
+  cansSpent      Int
+  status         String                @default("COMPLETED")
+  accessCount    Int                   @default(0) @map("access_count")
+  lastAccessAt   DateTime?             @map("last_access_at")
+  expiresAt      DateTime?             @map("expires_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+  accessTokens   DownloadAccessToken[]
+  downloadLink   DownloadLink          @relation(fields: [downloadLinkId], references: [id], onDelete: Cascade)
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, downloadLinkId])
+  @@index([userId])
+  @@index([downloadLinkId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("download_purchases")
+}
+
+model DownloadAccessLog {
+  id             String        @id @default(cuid())
+  userId         String?       @map("user_id")
+  downloadLinkId String?       @map("download_link_id")
+  postId         String?       @map("post_id")
+  logType        AccessLogType @map("log_type")
+  ipAddress      String        @map("ip_address")
+  userAgent      String        @map("user_agent")
+  errorMessage   String?       @map("error_message")
+  details        Json?
+  createdAt      DateTime      @default(now()) @map("created_at")
+  downloadLink   DownloadLink? @relation(fields: [downloadLinkId], references: [id])
+  post           Post?         @relation(fields: [postId], references: [id])
+  user           User?         @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([downloadLinkId])
+  @@index([postId])
+  @@index([logType])
+  @@index([ipAddress])
+  @@index([createdAt])
+  @@map("download_access_logs")
+}
+
+model DownloadAccessToken {
+  id                  String           @id @default(cuid())
+  userId              String           @map("user_id")
+  downloadLinkId      String           @map("download_link_id")
+  purchaseId          String           @map("purchase_id")
+  token               String           @unique
+  expiresAt           DateTime         @map("expires_at")
+  usedAt              DateTime?        @map("used_at")
+  ipAddress           String           @map("ip_address")
+  userAgent           String           @map("user_agent")
+  lastAccessIP        String?          @map("last_access_ip")
+  lastAccessUserAgent String?          @map("last_access_user_agent")
+  isUsed              Boolean          @default(false) @map("is_used")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+  downloadLink        DownloadLink     @relation(fields: [downloadLinkId], references: [id])
+  purchase            DownloadPurchase @relation(fields: [purchaseId], references: [id])
+  user                User             @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([downloadLinkId])
+  @@index([purchaseId])
+  @@index([expiresAt])
+  @@index([isUsed])
+  @@map("download_access_tokens")
+}
+
+model UserMentionStats {
+  id              String    @id @default(cuid())
+  userId          String    @unique @map("user_id")
+  totalMentions   Int       @default(0) @map("total_mentions")
+  postMentions    Int       @default(0) @map("post_mentions")
+  momentMentions  Int       @default(0) @map("moment_mentions")
+  commentMentions Int       @default(0) @map("comment_mentions")
+  weeklyMentions  Int       @default(0) @map("weekly_mentions")
+  monthlyMentions Int       @default(0) @map("monthly_mentions")
+  heatScore       Float     @default(0) @map("heat_score")
+  averagePosition Float     @default(0) @map("average_position")
+  lastMentionAt   DateTime? @map("last_mention_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([heatScore])
+  @@index([totalMentions])
+  @@index([lastMentionAt])
+  @@map("user_mention_stats")
+}
+
+model MentionRecord {
+  id              String   @id @default(cuid())
+  mentionedUserId String   @map("mentioned_user_id")
+  mentionerUserId String?  @map("mentioner_user_id")
+  contentType     String   @map("content_type")
+  contentId       String   @map("content_id")
+  mentionText     String   @map("mention_text")
+  resolvedBy      String   @map("resolved_by")
+  position        Int      @default(0)
+  createdAt       DateTime @default(now()) @map("created_at")
+  mentionedUser   User     @relation("MentionedUser", fields: [mentionedUserId], references: [id], onDelete: Cascade)
+  mentioner       User?    @relation("MentionerUser", fields: [mentionerUserId], references: [id])
+
+  @@index([mentionedUserId])
+  @@index([mentionerUserId])
+  @@index([contentType])
+  @@index([contentId])
+  @@index([createdAt])
+  @@map("mention_records")
+}
+
+model Notification {
+  id          String                 @id @default(cuid())
+  userId      String                 @map("user_id")
+  type        String
+  priority    String                 @default("NORMAL")
+  title       String
+  content     String
+  data        String?
+  actionUrl   String?                @map("action_url")
+  isRead      Boolean                @default(false) @map("is_read")
+  readAt      DateTime?              @map("read_at")
+  scheduledAt DateTime?              @map("scheduled_at")
+  expiresAt   DateTime?              @map("expires_at")
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+  deliveries  NotificationDelivery[]
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([priority])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([scheduledAt])
+  @@map("notifications")
+}
+
+model UserNotificationPreference {
+  id                String   @id @default(cuid())
+  userId            String   @map("user_id")
+  notificationType  String   @map("notification_type")
+  enableInApp       Boolean  @default(true) @map("enable_in_app")
+  enableEmail       Boolean  @default(false) @map("enable_email")
+  enablePush        Boolean  @default(false) @map("enable_push")
+  quietHoursStart   String?  @map("quiet_hours_start")
+  quietHoursEnd     String?  @map("quiet_hours_end")
+  quietHoursEnabled Boolean  @default(false) @map("quiet_hours_enabled")
+  batchEnabled      Boolean  @default(true) @map("batch_enabled")
+  batchInterval     Int      @default(60) @map("batch_interval")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notificationType])
+  @@index([userId])
+  @@index([notificationType])
+  @@map("user_notification_preferences")
+}
+
+model NotificationDelivery {
+  id             String       @id @default(cuid())
+  notificationId String       @map("notification_id")
+  userId         String       @map("user_id")
+  channel        String
+  status         String       @default("PENDING")
+  sentAt         DateTime?    @map("sent_at")
+  failureReason  String?      @map("failure_reason")
+  retryCount     Int          @default(0) @map("retry_count")
+  maxRetries     Int          @default(3) @map("max_retries")
+  nextRetryAt    DateTime?    @map("next_retry_at")
+  externalId     String?      @map("external_id")
+  externalStatus String?      @map("external_status")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId])
+  @@index([userId])
+  @@index([channel])
+  @@index([status])
+  @@index([nextRetryAt])
+  @@index([createdAt])
+  @@map("notification_deliveries")
+}
+
+model NotificationTemplate {
+  id              String   @id @default(cuid())
+  type            String   @unique
+  channel         String
+  titleTemplate   String   @map("title_template")
+  contentTemplate String   @map("content_template")
+  locale          String   @default("zh-CN")
+  version         Int      @default(1)
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([type, channel, locale])
+  @@index([type])
+  @@index([channel])
+  @@index([isActive])
+  @@map("notification_templates")
+}
+
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  type        String   @unique
+  subject     String
+  htmlContent String   @map("html_content")
+  textContent String?  @map("text_content")
+  isActive    Boolean  @default(true) @map("is_active")
+  isCustom    Boolean  @default(true) @map("is_custom")
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  creator     User?    @relation(fields: [createdBy], references: [id])
+
+  @@index([type])
+  @@index([isActive])
+  @@index([isCustom])
+  @@map("email_templates")
+}
+
+model NotificationStats {
+  id              String   @id @default(cuid())
+  date            DateTime @map("date")
+  type            String
+  channel         String
+  totalSent       Int      @default(0) @map("total_sent")
+  totalFailed     Int      @default(0) @map("total_failed")
+  totalRead       Int      @default(0) @map("total_read")
+  avgDeliveryTime Int?     @map("avg_delivery_time")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([date, type, channel])
+  @@index([date])
+  @@index([type])
+  @@index([channel])
+  @@map("notification_stats")
+}
+
+model UploadSession {
+  id               String               @id @default(cuid())
+  userId           String               @map("user_id")
+  filename         String               @map("file_name")
+  originalFilename String?              @map("original_filename")
+  fileSize         BigInt               @map("file_size")
+  chunkSize        Int                  @default(5242880) @map("chunk_size")
+  totalChunks      Int                  @map("total_chunks")
+  uploadedChunks   Int[]                @default([]) @map("uploaded_chunks")
+  status           String               @default("PENDING") @map("status")
+  storageProvider  String               @default("cloudflare-r2") @map("storage_provider")
+  metadata         Json                 @default("{}") @map("metadata")
+  errorMessage     String?              @map("error_message")
+  postId           String?              @map("post_id")
+  finalFileId      String?              @map("final_file_id")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+  expiresAt        DateTime?            @map("expires_at")
+  lastActivity     DateTime             @default(now()) @map("last_activity")
+  completedAt      DateTime?            @map("completed_at")
+  processingJobs   MediaProcessingJob[]
+  chunks           UploadChunk[]
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([lastActivity])
+  @@index([expiresAt])
+  @@map("upload_sessions")
+}
+
+model UploadChunk {
+  id         String        @id @default(cuid())
+  sessionId  String        @map("session_id")
+  chunkIndex Int           @map("chunk_index")
+  chunkHash  String        @map("chunk_hash")
+  chunkSize  Int           @map("chunk_size")
+  filePath   String        @map("file_path")
+  status     String        @default("PENDING")
+  uploadedAt DateTime?     @map("uploaded_at")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  session    UploadSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, chunkIndex])
+  @@index([sessionId])
+  @@index([status])
+  @@map("upload_chunks")
+}
+
+model CleanupRule {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  pattern         String
+  maxAge          Int?     @map("max_age")
+  maxSize         Int?     @map("max_size")
+  maxCount        Int?     @map("max_count")
+  action          String
+  enabled         Boolean  @default(true)
+  schedule        String?
+  excludePatterns String?  @map("exclude_patterns")
+  keepLatest      Int?     @map("keep_latest")
+  priority        Int      @default(0)
+  description     String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([enabled])
+  @@index([schedule])
+  @@map("cleanup_rules")
+}
+
+model CleanupLog {
+  id              String    @id @default(cuid())
+  ruleName        String    @map("rule_name")
+  scannedFiles    Int       @map("scanned_files")
+  processedFiles  Int       @map("processed_files")
+  deletedFiles    Int       @map("deleted_files")
+  archivedFiles   Int       @map("archived_files")
+  compressedFiles Int       @map("compressed_files")
+  freedSpace      BigInt    @map("freed_space")
+  errors          String    @default("[]")
+  duration        Int
+  timestamp       DateTime  @default(now())
+  startTime       DateTime  @default(now()) @map("start_time")
+  endTime         DateTime? @map("end_time")
+  success         Boolean   @default(true)
+
+  @@index([ruleName])
+  @@index([timestamp])
+  @@map("cleanup_logs")
+}
+
+model ObjectStorageConfig {
+  id              String    @id @default(cuid())
+  provider        String
+  configData      String    @map("config_data")
+  isActive        Boolean   @default(false) @map("is_active")
+  isPrimary       Boolean   @default(false) @map("is_primary")
+  healthStatus    String    @default("UNKNOWN") @map("health_status")
+  lastHealthCheck DateTime? @map("last_health_check")
+  errorCount      Int       @default(0) @map("error_count")
+  lastError       String?   @map("last_error")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([provider])
+  @@index([isActive])
+  @@index([isPrimary])
+  @@index([healthStatus])
+  @@map("object_storage_configs")
+}
+
+model MediaProcessingJob {
+  id           String         @id @default(cuid())
+  sessionId    String?        @map("session_id")
+  mediaId      String?        @map("media_id")
+  jobType      String         @map("job_type")
+  priority     Int            @default(5)
+  status       String         @default("PENDING")
+  inputPath    String         @map("input_path")
+  outputPath   String?        @map("output_path")
+  parameters   Json           @default("{}")
+  progress     Int            @default(0)
+  result       Json           @default("{}")
+  errorMessage String?        @map("error_message")
+  workerId     String?        @map("worker_id")
+  startedAt    DateTime?      @map("started_at")
+  completedAt  DateTime?      @map("completed_at")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  media        PostMedia?     @relation(fields: [mediaId], references: [id])
+  session      UploadSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([status, priority])
+  @@index([workerId])
+  @@index([createdAt])
+  @@map("media_processing_jobs")
+}
+
+model StorageConfig {
+  id              Int       @id @default(autoincrement())
+  provider        String    @unique
+  config          Json
+  isActive        Boolean   @default(true) @map("is_active")
+  isPrimary       Boolean   @default(false) @map("is_primary")
+  priority        Int       @default(0)
+  healthStatus    String    @default("UNKNOWN") @map("health_status")
+  lastHealthCheck DateTime? @map("last_health_check")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("storage_configs")
+}
+
+model StorageUsageStats {
+  id            Int      @id @default(autoincrement())
+  date          DateTime @db.Date
+  provider      String
+  totalFiles    BigInt   @default(0) @map("total_files")
+  totalSize     BigInt   @default(0) @map("total_size")
+  uploadCount   BigInt   @default(0) @map("upload_count")
+  downloadCount BigInt   @default(0) @map("download_count")
+  bandwidthUsed BigInt   @default(0) @map("bandwidth_used")
+  storageCost   Decimal  @default(0) @map("storage_cost") @db.Decimal(10, 4)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([date, provider])
+  @@index([date])
+  @@index([provider])
+  @@map("storage_usage_stats")
+}
+
+model SystemMediaConfig {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       Json
+  description String?
+  category    String   @default("general")
+  isPublic    Boolean  @default(false) @map("is_public")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("system_media_configs")
+}
+
+model UserApprovalLog {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  adminId        String   @map("admin_id")
+  action         String
+  previousStatus String?  @map("previous_status")
+  newStatus      String   @map("new_status")
+  reason         String?
+  metadata       Json     @default("{}")
+  ipAddress      String?  @map("ip_address")
+  userAgent      String?  @map("user_agent")
+  createdAt      DateTime @default(now()) @map("created_at")
+  admin          User     @relation("ApprovalAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([adminId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("user_approval_logs")
+}
+
+model ApprovalHistory {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  previousStatus String   @map("previous_status")
+  newStatus      String   @map("new_status")
+  action         String
+  adminId        String   @map("admin_id")
+  reason         String?
+  timestamp      DateTime @default(now())
+  batchId        String?  @map("batch_id")
+  admin          User     @relation("ApprovalHistoryAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  user           User     @relation("ApprovalHistoryUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([adminId])
+  @@index([action])
+  @@index([timestamp])
+  @@index([batchId])
+  @@map("approval_history")
+}
+
+model TimeoutNotification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  type      String
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation("TimeoutNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("timeout_notifications")
+}
+
+model UploadTransaction {
+  id                  String               @id @default(cuid())
+  transactionId       String               @unique @map("transaction_id")
+  userId              String               @map("user_id")
+  filename            String
+  fileSize            BigInt               @map("file_size")
+  mimeType            String               @map("mime_type")
+  uploadStrategy      String               @map("upload_strategy")
+  status              String               @default("PENDING")
+  storageKey          String?              @map("storage_key")
+  multipartUploadId   String?              @map("multipart_upload_id")
+  totalParts          Int                  @default(0) @map("total_parts")
+  completedParts      Int                  @default(0) @map("completed_parts")
+  errorMessage        String?              @map("error_message")
+  retryCount          Int                  @default(0) @map("retry_count")
+  maxRetries          Int                  @default(3) @map("max_retries")
+  startedAt           DateTime             @default(now()) @map("started_at")
+  completedAt         DateTime?            @map("completed_at")
+  expiresAt           DateTime             @map("expires_at")
+  metadata            Json                 @default("{}")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  compensationActions CompensationAction[]
+  metrics             TransactionMetrics?
+  steps               TransactionStep[]
+  user                User                 @relation("UploadTransactions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdAt])
+  @@index([uploadStrategy])
+  @@map("upload_transactions")
+}
+
+model TransactionStep {
+  id                  String               @id @default(cuid())
+  transactionId       String               @map("transaction_id")
+  stepName            String               @map("step_name")
+  stepOrder           Int                  @map("step_order")
+  status              String               @default("PENDING")
+  startedAt           DateTime?            @map("started_at")
+  completedAt         DateTime?            @map("completed_at")
+  errorMessage        String?              @map("error_message")
+  retryCount          Int                  @default(0) @map("retry_count")
+  maxRetries          Int                  @default(3) @map("max_retries")
+  stepData            Json                 @default("{}") @map("step_data")
+  compensationData    Json                 @default("{}") @map("compensation_data")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  compensationActions CompensationAction[]
+  transaction         UploadTransaction    @relation(fields: [transactionId], references: [transactionId], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([status])
+  @@index([stepOrder])
+  @@index([stepName])
+  @@map("transaction_steps")
+}
+
+model CompensationAction {
+  id            String            @id @default(cuid())
+  transactionId String            @map("transaction_id")
+  stepId        String?           @map("step_id")
+  actionType    String            @map("action_type")
+  actionData    Json              @map("action_data")
+  status        String            @default("PENDING")
+  executedAt    DateTime?         @map("executed_at")
+  completedAt   DateTime?         @map("completed_at")
+  errorMessage  String?           @map("error_message")
+  retryCount    Int               @default(0) @map("retry_count")
+  maxRetries    Int               @default(3) @map("max_retries")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+  step          TransactionStep?  @relation(fields: [stepId], references: [id])
+  transaction   UploadTransaction @relation(fields: [transactionId], references: [transactionId], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([status])
+  @@index([actionType])
+  @@map("compensation_actions")
+}
+
+model OrphanFile {
+  id                 String    @id @default(cuid())
+  storageKey         String    @unique @map("storage_key")
+  fileSize           BigInt?   @map("file_size")
+  mimeType           String?   @map("mime_type")
+  lastModified       DateTime? @map("last_modified")
+  detectedAt         DateTime  @default(now()) @map("detected_at")
+  lastCheckedAt      DateTime  @default(now()) @map("last_checked_at")
+  cleanupStatus      String    @default("DETECTED") @map("cleanup_status")
+  cleanupAttempts    Int       @default(0) @map("cleanup_attempts")
+  cleanupScheduledAt DateTime? @map("cleanup_scheduled_at")
+  cleanupCompletedAt DateTime? @map("cleanup_completed_at")
+  protectionReason   String?   @map("protection_reason")
+  errorMessage       String?   @map("error_message")
+  metadata           Json      @default("{}")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@index([storageKey])
+  @@index([cleanupStatus])
+  @@index([detectedAt])
+  @@index([lastCheckedAt])
+  @@map("orphan_files")
+}
+
+model TransactionMetrics {
+  id                   String            @id @default(cuid())
+  transactionId        String            @unique @map("transaction_id")
+  userId               String            @map("user_id")
+  uploadStrategy       String            @map("upload_strategy")
+  fileSize             BigInt            @map("file_size")
+  mimeType             String            @map("mime_type")
+  totalSteps           Int               @map("total_steps")
+  completedSteps       Int               @map("completed_steps")
+  failedSteps          Int               @map("failed_steps")
+  retryCount           Int               @default(0) @map("retry_count")
+  startTime            DateTime          @map("start_time")
+  endTime              DateTime?         @map("end_time")
+  durationMs           Int?              @map("duration_ms")
+  status               String
+  errorCategory        String?           @map("error_category")
+  errorMessage         String?           @map("error_message")
+  compensationExecuted Boolean           @default(false) @map("compensation_executed")
+  metadata             Json              @default("{}")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  transaction          UploadTransaction @relation(fields: [transactionId], references: [transactionId], onDelete: Cascade)
+  user                 User              @relation("TransactionMetrics", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([userId])
+  @@index([uploadStrategy])
+  @@index([status])
+  @@index([startTime])
+  @@index([errorCategory])
+  @@map("transaction_metrics")
+}
+
+model SystemHealthCheck {
+  id        String   @id @default(cuid())
+  checkType String   @map("check_type")
+  status    String
+  metrics   Json
+  alerts    Json     @default("[]")
+  checkedAt DateTime @default(now()) @map("checked_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([checkType])
+  @@index([status])
+  @@index([checkedAt])
+  @@map("system_health_checks")
+}
+
+model TurnstileConfig {
+  id            String   @id @default(cuid())
+  featureId     String   @unique @map("feature_id")
+  enabled       Boolean  @default(false)
+  updatedBy     String   @map("updated_by")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedByUser User     @relation(fields: [updatedBy], references: [id], onDelete: Cascade)
+
+  @@index([featureId])
+  @@index([enabled])
+  @@index([updatedAt])
+  @@map("turnstile_configs")
+}
+
+model TurnstileStats {
+  id              String   @id @default(cuid())
+  featureId       String   @map("feature_id")
+  date            DateTime @db.Date
+  totalAttempts   Int      @default(0) @map("total_attempts")
+  successCount    Int      @default(0) @map("success_count")
+  failureCount    Int      @default(0) @map("failure_count")
+  avgResponseTime Float    @default(0) @map("avg_response_time")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([featureId, date])
+  @@index([featureId])
+  @@index([date])
+  @@map("turnstile_stats")
+}
+
+enum AccessLogType {
+  PURCHASE
+  ACCESS
+  DOWNLOAD
+  FAILED_PURCHASE
+  SUSPICIOUS
+  RATE_LIMITED
+}

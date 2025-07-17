@@ -1,0 +1,133 @@
+name: 环境变量命名规范检查
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  env-vars-compliance:
+    runs-on: ubuntu-latest
+    name: 检查环境变量命名规范合规性
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 运行环境变量命名规范检查
+        run: |
+          echo "🔍 检查环境变量命名规范..."
+          npm run lint:env-vars
+        continue-on-error: false
+
+      - name: 检查硬编码配置
+        run: |
+          echo "🔒 检查硬编码配置..."
+          echo "硬编码配置检查已集成到环境变量检查工具中"
+
+      - name: 生成环境变量迁移预览
+        run: |
+          echo "📋 生成环境变量迁移预览..."
+          npm run config:migrate-env > migration-preview.txt
+
+          echo "## 环境变量迁移预览" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          cat migration-preview.txt >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: 检查生产环境配置安全性
+        run: |
+          echo "🔐 检查生产环境配置安全性..."
+
+          # 检查是否存在production.env文件
+          if [ -f "production.env" ]; then
+            echo "❌ 错误: production.env文件不应存在于代码仓库中"
+            echo "请将敏感配置移动到环境变量或密钥管理系统"
+            exit 1
+          fi
+
+          # 检查.env文件是否被正确忽略
+          if git ls-files | grep -E "\.env$|\.env\.production$"; then
+            echo "❌ 错误: 发现未被忽略的环境变量文件"
+            git ls-files | grep -E "\.env$|\.env\.production$"
+            exit 1
+          fi
+
+          echo "✅ 生产环境配置安全性检查通过"
+
+      - name: 验证环境变量文档
+        run: |
+          echo "📖 验证环境变量文档..."
+
+          # 检查.env.example是否存在
+          if [ ! -f ".env.example" ]; then
+            echo "❌ 错误: 缺少.env.example文件"
+            exit 1
+          fi
+
+          # 检查是否有COSEREEDEN_前缀的变量
+          if ! grep -q "COSEREEDEN_" .env.example; then
+            echo "⚠️  警告: .env.example中没有发现COSEREEDEN_前缀的变量"
+          fi
+
+          echo "✅ 环境变量文档验证通过"
+
+      - name: 上传ESLint报告
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eslint-env-vars-report
+          path: |
+            eslint-hardcoded-report.json
+            migration-preview.txt
+          retention-days: 30
+
+  security-scan:
+    runs-on: ubuntu-latest
+    name: 安全扫描
+    needs: env-vars-compliance
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 扫描敏感信息
+        run: |
+          echo "🔍 扫描代码中的敏感信息..."
+
+          # 检查常见的敏感信息模式
+          SENSITIVE_PATTERNS=(
+            "sk_[a-zA-Z0-9]{20,}"
+            "pk_[a-zA-Z0-9]{20,}"
+            "postgresql://[^'\"]*:[^'\"]*@"
+            "mysql://[^'\"]*:[^'\"]*@"
+            "redis://[^'\"]*:[^'\"]*@"
+            "['\"][A-Za-z0-9]{32}['\"]"
+            "['\"][A-Za-z0-9]{40}['\"]"
+          )
+
+          FOUND_ISSUES=false
+
+          for pattern in "${SENSITIVE_PATTERNS[@]}"; do
+            if grep -r -E "$pattern" src/ --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" 2>/dev/null; then
+              echo "❌ 发现可能的敏感信息: $pattern"
+              FOUND_ISSUES=true
+            fi
+          done
+
+          if [ "$FOUND_ISSUES" = true ]; then
+            echo "❌ 安全扫描发现问题，请检查上述输出"
+            exit 1
+          else
+            echo "✅ 安全扫描通过"
+          fi

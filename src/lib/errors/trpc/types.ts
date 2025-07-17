@@ -1,0 +1,207 @@
+/**
+ * @fileoverview tRPC错误类型定义
+ * @description 错误处理相关的类型定义和枚举
+ * @author Augment AI
+ * @date 2025-07-06
+ * @version 1.0.0
+ */
+
+import { UserLevel } from '@/types/user-level';
+
+/**
+ * 业务错误类型枚举
+ */
+export enum BusinessErrorType {
+  // 资源相关
+  RESOURCE_NOT_FOUND = 'RESOURCE_NOT_FOUND',
+  RESOURCE_ALREADY_EXISTS = 'RESOURCE_ALREADY_EXISTS',
+  RESOURCE_EXISTS = 'RESOURCE_EXISTS',
+  RESOURCE_CONFLICT = 'RESOURCE_CONFLICT',
+  RESOURCE_LOCKED = 'RESOURCE_LOCKED',
+  DUPLICATE_RESOURCE = 'DUPLICATE_RESOURCE',
+
+  // 权限相关
+  INSUFFICIENT_PERMISSIONS = 'INSUFFICIENT_PERMISSIONS',
+  ACCOUNT_DISABLED = 'ACCOUNT_DISABLED',
+  NOT_AUTHENTICATED = 'NOT_AUTHENTICATED',
+  UNAUTHORIZED = 'UNAUTHORIZED',
+  FORBIDDEN = 'FORBIDDEN',
+  SECURITY_VIOLATION = 'SECURITY_VIOLATION',
+
+  // 认证相关
+  INVALID_CREDENTIALS = 'INVALID_CREDENTIALS',
+  EMAIL_NOT_VERIFIED = 'EMAIL_NOT_VERIFIED',
+  INVALID_TOKEN = 'INVALID_TOKEN',
+  TOKEN_EXPIRED = 'TOKEN_EXPIRED',
+
+  // 文件上传相关
+  FILE_TOO_LARGE = 'FILE_TOO_LARGE',
+  UNSUPPORTED_FILE_TYPE = 'UNSUPPORTED_FILE_TYPE',
+  INVALID_FILE_TYPE = 'INVALID_FILE_TYPE',
+  UPLOAD_FAILED = 'UPLOAD_FAILED',
+  CHUNK_UPLOAD_FAILED = 'CHUNK_UPLOAD_FAILED',
+  VIDEO_ENCODING_INVALID = 'VIDEO_ENCODING_INVALID',
+  SESSION_NOT_FOUND = 'SESSION_NOT_FOUND',
+  FILE_INTEGRITY_ERROR = 'FILE_INTEGRITY_ERROR',
+
+  // 验证相关
+  VALIDATION_FAILED = 'VALIDATION_FAILED',
+  REQUIRED_FIELD = 'REQUIRED_FIELD',
+  INVALID_FORMAT = 'INVALID_FORMAT',
+  INVALID_INPUT = 'INVALID_INPUT',
+  CONTENT_TOO_LONG = 'CONTENT_TOO_LONG',
+  INVALID_STATE = 'INVALID_STATE',
+
+  // 系统相关
+  INTERNAL_SERVER_ERROR = 'INTERNAL_SERVER_ERROR',
+  INTERNAL_ERROR = 'INTERNAL_ERROR',
+  DATABASE_ERROR = 'DATABASE_ERROR',
+  NETWORK_ERROR = 'NETWORK_ERROR',
+  RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED',
+  CONFIGURATION_ERROR = 'CONFIGURATION_ERROR',
+  SERVICE_UNAVAILABLE = 'SERVICE_UNAVAILABLE',
+
+  // 业务逻辑相关
+  INSUFFICIENT_BALANCE = 'INSUFFICIENT_BALANCE',
+  OPERATION_NOT_ALLOWED = 'OPERATION_NOT_ALLOWED',
+  INVALID_OPERATION = 'INVALID_OPERATION',
+  QUOTA_EXCEEDED = 'QUOTA_EXCEEDED',
+  MEMORY_LIMIT_EXCEEDED = 'MEMORY_LIMIT_EXCEEDED',
+  OPERATION_IN_PROGRESS = 'OPERATION_IN_PROGRESS',
+  FEATURE_DISABLED = 'FEATURE_DISABLED',
+
+  // 视频转码相关
+  CONFLICT = 'CONFLICT',
+}
+
+/**
+ * 错误上下文接口
+ */
+export interface TRPCErrorContext {
+  userLevel?: UserLevel;
+  environment?: 'development' | 'production' | 'test';
+  context?: Record<string, any>;
+  recoveryActions?: string[];
+}
+
+/**
+ * 文件上传错误上下文接口
+ */
+export interface FileUploadErrorContext extends TRPCErrorContext {
+  fileSize?: number;
+  maxSize?: number;
+  fileName?: string;
+  fileType?: string;
+  allowedTypes?: string[];
+  forbiddenReason?: string;
+}
+
+/**
+ * 文件上传错误类型
+ */
+export type FileUploadErrorType = 
+  | 'FILE_TOO_LARGE'
+  | 'UNSUPPORTED_FILE_TYPE'
+  | 'INVALID_FILE_TYPE'
+  | 'UPLOAD_FAILED'
+  | 'CHUNK_UPLOAD_FAILED';
+
+/**
+ * 错误处理选项接口
+ */
+export interface ErrorHandleOptions {
+  code?: string;
+  message?: string;
+  context?: TRPCErrorContext;
+}
+
+/**
+ * 用户权限级别数组（按权限从低到高排序）
+ */
+export const USER_LEVEL_HIERARCHY: UserLevel[] = [
+  'GUEST', 
+  'USER', 
+  'VIP', 
+  'CREATOR', 
+  'ADMIN', 
+  'SUPER_ADMIN'
+];
+
+/**
+ * 业务错误类型到tRPC错误代码的映射
+ */
+export const BUSINESS_ERROR_TO_TRPC_CODE_MAP: Record<BusinessErrorType, string> = {
+  // 资源相关
+  [BusinessErrorType.RESOURCE_NOT_FOUND]: 'NOT_FOUND',
+  [BusinessErrorType.RESOURCE_ALREADY_EXISTS]: 'CONFLICT',
+  [BusinessErrorType.RESOURCE_EXISTS]: 'CONFLICT',
+  [BusinessErrorType.RESOURCE_CONFLICT]: 'CONFLICT',
+  [BusinessErrorType.RESOURCE_LOCKED]: 'CONFLICT',
+  [BusinessErrorType.DUPLICATE_RESOURCE]: 'CONFLICT',
+
+  // 权限相关
+  [BusinessErrorType.INSUFFICIENT_PERMISSIONS]: 'FORBIDDEN',
+  [BusinessErrorType.ACCOUNT_DISABLED]: 'FORBIDDEN',
+  [BusinessErrorType.FORBIDDEN]: 'FORBIDDEN',
+  [BusinessErrorType.SECURITY_VIOLATION]: 'FORBIDDEN',
+  [BusinessErrorType.NOT_AUTHENTICATED]: 'UNAUTHORIZED',
+  [BusinessErrorType.UNAUTHORIZED]: 'UNAUTHORIZED',
+
+  // 认证相关
+  [BusinessErrorType.INVALID_CREDENTIALS]: 'UNAUTHORIZED',
+  [BusinessErrorType.EMAIL_NOT_VERIFIED]: 'UNAUTHORIZED',
+  [BusinessErrorType.INVALID_TOKEN]: 'UNAUTHORIZED',
+  [BusinessErrorType.TOKEN_EXPIRED]: 'UNAUTHORIZED',
+
+  // 验证相关
+  [BusinessErrorType.VALIDATION_FAILED]: 'BAD_REQUEST',
+  [BusinessErrorType.REQUIRED_FIELD]: 'BAD_REQUEST',
+  [BusinessErrorType.INVALID_FORMAT]: 'BAD_REQUEST',
+  [BusinessErrorType.INVALID_INPUT]: 'BAD_REQUEST',
+  [BusinessErrorType.INVALID_OPERATION]: 'BAD_REQUEST',
+  [BusinessErrorType.CONTENT_TOO_LONG]: 'BAD_REQUEST',
+  [BusinessErrorType.INVALID_STATE]: 'BAD_REQUEST',
+
+  // 文件上传相关
+  [BusinessErrorType.FILE_TOO_LARGE]: 'BAD_REQUEST',
+  [BusinessErrorType.UNSUPPORTED_FILE_TYPE]: 'BAD_REQUEST',
+  [BusinessErrorType.INVALID_FILE_TYPE]: 'BAD_REQUEST',
+  [BusinessErrorType.VIDEO_ENCODING_INVALID]: 'BAD_REQUEST',
+  [BusinessErrorType.UPLOAD_FAILED]: 'INTERNAL_SERVER_ERROR',
+  [BusinessErrorType.CHUNK_UPLOAD_FAILED]: 'INTERNAL_SERVER_ERROR',
+  [BusinessErrorType.SESSION_NOT_FOUND]: 'NOT_FOUND',
+  [BusinessErrorType.FILE_INTEGRITY_ERROR]: 'BAD_REQUEST',
+
+  // 系统相关
+  [BusinessErrorType.RATE_LIMIT_EXCEEDED]: 'TOO_MANY_REQUESTS',
+  [BusinessErrorType.INTERNAL_SERVER_ERROR]: 'INTERNAL_SERVER_ERROR',
+  [BusinessErrorType.INTERNAL_ERROR]: 'INTERNAL_SERVER_ERROR',
+  [BusinessErrorType.DATABASE_ERROR]: 'INTERNAL_SERVER_ERROR',
+  [BusinessErrorType.NETWORK_ERROR]: 'INTERNAL_SERVER_ERROR',
+  [BusinessErrorType.CONFIGURATION_ERROR]: 'INTERNAL_SERVER_ERROR',
+  [BusinessErrorType.SERVICE_UNAVAILABLE]: 'INTERNAL_SERVER_ERROR',
+
+  // 业务逻辑相关
+  [BusinessErrorType.INSUFFICIENT_BALANCE]: 'BAD_REQUEST',
+  [BusinessErrorType.OPERATION_NOT_ALLOWED]: 'FORBIDDEN',
+  [BusinessErrorType.QUOTA_EXCEEDED]: 'BAD_REQUEST',
+  [BusinessErrorType.MEMORY_LIMIT_EXCEEDED]: 'INTERNAL_SERVER_ERROR',
+  [BusinessErrorType.OPERATION_IN_PROGRESS]: 'CONFLICT',
+  [BusinessErrorType.FEATURE_DISABLED]: 'FORBIDDEN',
+
+  // 视频转码相关
+  [BusinessErrorType.CONFLICT]: 'CONFLICT',
+};
+
+/**
+ * 错误代码到业务错误类型的映射
+ */
+export const TRPC_CODE_TO_BUSINESS_ERROR_MAP: Record<string, BusinessErrorType> = {
+  'BAD_REQUEST': BusinessErrorType.VALIDATION_FAILED,
+  'UNAUTHORIZED': BusinessErrorType.NOT_AUTHENTICATED,
+  'FORBIDDEN': BusinessErrorType.INSUFFICIENT_PERMISSIONS,
+  'NOT_FOUND': BusinessErrorType.RESOURCE_NOT_FOUND,
+  'CONFLICT': BusinessErrorType.CONFLICT,
+  'TOO_MANY_REQUESTS': BusinessErrorType.RATE_LIMIT_EXCEEDED,
+  'INTERNAL_SERVER_ERROR': BusinessErrorType.INTERNAL_SERVER_ERROR,
+};

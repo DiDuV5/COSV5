@@ -1,0 +1,194 @@
+name: 🚀 Production Deploy with Auto Cleanup
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+    inputs:
+      skip_cleanup:
+        description: "跳过自动清理"
+        required: false
+        default: "false"
+        type: boolean
+      force_cleanup:
+        description: "强制深度清理"
+        required: false
+        default: "false"
+        type: boolean
+
+env:
+  NODE_VERSION: "22.17.0"
+  PRODUCTION_HOST: "185.170.198.240"
+  PRODUCTION_USER: "root"
+  PROJECT_PATH: "/root/cosereeden6"
+
+jobs:
+  # 预检查和构建
+  pre-deploy-checks:
+    name: 🔍 Pre-Deploy Checks
+    runs-on: ubuntu-latest
+    outputs:
+      should-deploy: ${{ steps.checks.outputs.should-deploy }}
+      cleanup-mode: ${{ steps.checks.outputs.cleanup-mode }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run type check
+        run: npm run type-check
+
+      - name: Run tests
+        run: npm run test:ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Determine deployment strategy
+        id: checks
+        run: |
+          echo "should-deploy=true" >> $GITHUB_OUTPUT
+
+          if [[ "${{ github.event.inputs.force_cleanup }}" == "true" ]]; then
+            echo "cleanup-mode=force" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.skip_cleanup }}" == "true" ]]; then
+            echo "cleanup-mode=skip" >> $GITHUB_OUTPUT
+          else
+            echo "cleanup-mode=auto" >> $GITHUB_OUTPUT
+          fi
+
+  # 生产环境清理
+  production-cleanup:
+    name: 🧹 Production Environment Cleanup
+    runs-on: ubuntu-latest
+    needs: pre-deploy-checks
+    if: needs.pre-deploy-checks.outputs.should-deploy == 'true' && needs.pre-deploy-checks.outputs.cleanup-mode != 'skip'
+
+    steps:
+      - name: Checkout deployment scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/
+            .github/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ env.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Execute production cleanup
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.PRODUCTION_USER }}@${{ env.PRODUCTION_HOST }} \
+            "bash -s" < scripts/production-auto-cleanup.sh \
+            "${{ needs.pre-deploy-checks.outputs.cleanup-mode }}" \
+            "${{ github.sha }}" \
+            "${{ github.run_number }}"
+
+      - name: Verify cleanup results
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.PRODUCTION_USER }}@${{ env.PRODUCTION_HOST }} \
+            "cd ${{ env.PROJECT_PATH }} && bash scripts/verify-cleanup.sh"
+
+  # 部署应用
+  deploy-application:
+    name: 🚀 Deploy Application
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-checks, production-cleanup]
+    if: always() && needs.pre-deploy-checks.outputs.should-deploy == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install and build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ env.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to production
+        run: |
+          # 创建部署包
+          tar -czf cosereeden-deploy.tar.gz \
+            --exclude=node_modules \
+            --exclude=.git \
+            --exclude=coverage \
+            --exclude=.next \
+            --exclude=temp \
+            --exclude=uploads \
+            .
+
+          # 上传到服务器
+          scp cosereeden-deploy.tar.gz ${{ env.PRODUCTION_USER }}@${{ env.PRODUCTION_HOST }}:/tmp/
+
+          # 执行部署
+          ssh -o StrictHostKeyChecking=no ${{ env.PRODUCTION_USER }}@${{ env.PRODUCTION_HOST }} \
+            "cd ${{ env.PROJECT_PATH }} && bash scripts/deploy-with-cleanup.sh /tmp/cosereeden-deploy.tar.gz"
+
+  # 部署后验证
+  post-deploy-verification:
+    name: ✅ Post-Deploy Verification
+    runs-on: ubuntu-latest
+    needs: [deploy-application]
+    if: always() && needs.deploy-application.result == 'success'
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ env.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Health check
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.PRODUCTION_USER }}@${{ env.PRODUCTION_HOST }} \
+            "cd ${{ env.PROJECT_PATH }} && bash scripts/health-check.sh"
+
+      - name: Generate cleanup report
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.PRODUCTION_USER }}@${{ env.PRODUCTION_HOST }} \
+            "cd ${{ env.PROJECT_PATH }} && bash scripts/generate-cleanup-report.sh" > cleanup-report.txt
+
+      - name: Upload cleanup report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-report-${{ github.run_number }}
+          path: cleanup-report.txt
+          retention-days: 30
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "✅ 部署成功完成！"
+          else
+            echo "❌ 部署失败，请检查日志"
+          fi

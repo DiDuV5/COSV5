@@ -1,0 +1,150 @@
+name: 代码清理检查
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - '.eslintrc.json'
+      - 'package.json'
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - '.eslintrc.json'
+      - 'package.json'
+  schedule:
+    # 每天凌晨2点运行
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  code-cleanup-check:
+    name: 代码清理检查
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 设置Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: 安装依赖
+        run: npm ci
+      
+      - name: 运行代码清理检查
+        id: cleanup-check
+        run: |
+          echo "🔍 运行代码清理检查..."
+          npm run code-cleanup:check || echo "cleanup_issues=true" >> $GITHUB_OUTPUT
+      
+      - name: 运行ESLint检查
+        run: |
+          echo "🔧 运行ESLint检查..."
+          npm run lint:check
+      
+      - name: 运行Prettier检查
+        run: |
+          echo "💅 运行Prettier检查..."
+          npm run format:check
+      
+      - name: 检查文件大小
+        run: |
+          echo "📏 检查大文件..."
+          find src/ \( -name "*.ts" -o -name "*.tsx" \) -exec wc -l {} + | awk '$1 > 500 && $2 != "total" { 
+            print "⚠️ 大文件: " $2 " (" $1 " lines)"
+            exit_code=1
+          } END { 
+            if (exit_code) exit 1 
+          }'
+      
+      - name: 检查重复代码
+        run: |
+          echo "🔍 检查重复代码..."
+          # 检查重复的重新导出
+          if grep -r "export.*from" src/server/api/routers/ | grep -v "index.ts" | grep -v "types.ts"; then
+            echo "⚠️ 发现可能的重复重新导出"
+          fi
+      
+      - name: 生成清理报告
+        if: always()
+        run: |
+          echo "📊 生成清理报告..."
+          
+          # 统计信息
+          TOTAL_FILES=$(find src/ -name "*.ts" -o -name "*.tsx" | wc -l)
+          LARGE_FILES=$(find src/ \( -name "*.ts" -o -name "*.tsx" \) -exec wc -l {} + | awk '$1 > 500 && $2 != "total"' | wc -l)
+          BACKUP_FILES=$(find src/ -name "*.backup" -o -name "*-old.*" -o -name "*_old.*" | wc -l)
+          TODO_COUNT=$(grep -r "TODO\|FIXME\|HACK" src/ | wc -l || echo "0")
+          
+          echo "## 📊 代码清理报告" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 指标 | 数量 | 状态 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 总文件数 | $TOTAL_FILES | ℹ️ |" >> $GITHUB_STEP_SUMMARY
+          echo "| 大文件 (>500行) | $LARGE_FILES | $([ $LARGE_FILES -eq 0 ] && echo "✅" || echo "⚠️") |" >> $GITHUB_STEP_SUMMARY
+          echo "| 备份文件 | $BACKUP_FILES | $([ $BACKUP_FILES -eq 0 ] && echo "✅" || echo "❌") |" >> $GITHUB_STEP_SUMMARY
+          echo "| TODO注释 | $TODO_COUNT | ℹ️ |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$LARGE_FILES" -gt 0 ] || [ "$BACKUP_FILES" -gt 0 ]; then
+            echo "### 🔧 建议的清理操作" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            if [ "$BACKUP_FILES" -gt 0 ]; then
+              echo "- 🗑️ 删除备份文件: \`find src/ -name '*.backup' -delete\`" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [ "$LARGE_FILES" -gt 0 ]; then
+              echo "- 📦 拆分大文件为更小的模块" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "- 🔧 运行自动清理: \`npm run code-cleanup:auto\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ✅ 代码库状态良好" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "没有发现需要清理的问题。" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: 评论PR (如果有清理问题)
+        if: github.event_name == 'pull_request' && steps.cleanup-check.outputs.cleanup_issues == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🧹 代码清理检查
+              
+              发现一些代码清理问题，建议在合并前处理：
+              
+              ### 🔧 推荐操作
+              1. 运行自动清理：\`npm run code-cleanup:auto\`
+              2. 检查清理结果：\`git diff\`
+              3. 提交清理更改：\`git commit -m "chore: 代码清理"\`
+              
+              ### 📋 清理规范
+              - 删除备份文件 (*.backup, *-old.*, *_old.*)
+              - 拆分大文件 (>500行)
+              - 修复ESLint问题
+              - 统一代码格式
+              
+              详细信息请查看 [代码清理规范](docs/CODE_CLEANUP_STANDARDS.md)。`
+            })
+      
+      - name: 设置检查状态
+        if: always()
+        run: |
+          if [ "${{ steps.cleanup-check.outputs.cleanup_issues }}" == "true" ]; then
+            echo "⚠️ 代码清理检查发现问题，但不阻断构建"
+            exit 0
+          else
+            echo "✅ 代码清理检查通过"
+            exit 0
+          fi

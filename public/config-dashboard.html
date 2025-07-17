@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoserEden 配置监控仪表板</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status-healthy { color: green; }
+        .status-warning { color: orange; }
+        .status-error { color: red; }
+        .card { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .metric { display: inline-block; margin: 10px; padding: 10px; background: #f5f5f5; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>🔧 CoserEden 配置监控仪表板</h1>
+    
+    <div class="card">
+        <h2>📊 配置健康状态</h2>
+        <div id="health-status">加载中...</div>
+    </div>
+    
+    <div class="card">
+        <h2>📈 配置指标</h2>
+        <div class="metric">
+            <strong>总配置项:</strong> <span id="total-configs">-</span>
+        </div>
+        <div class="metric">
+            <strong>COSEREEDEN_前缀:</strong> <span id="cosereeden-configs">-</span>
+        </div>
+        <div class="metric">
+            <strong>配置冲突:</strong> <span id="config-conflicts">-</span>
+        </div>
+        <div class="metric">
+            <strong>命名规范问题:</strong> <span id="naming-issues">-</span>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h2>🔍 最近检查</h2>
+        <div id="recent-checks">暂无数据</div>
+    </div>
+    
+    <script>
+        // 加载配置健康报告
+        async function loadHealthReport() {
+            try {
+                const response = await fetch('/logs/config-health-report.json');
+                const report = await response.json();
+                
+                const statusElement = document.getElementById('health-status');
+                const statusClass = report.status === 'HEALTHY' ? 'status-healthy' : 
+                                  report.status === 'WARNING' ? 'status-warning' : 'status-error';
+                
+                statusElement.innerHTML = `<span class="${statusClass}">${report.status}</span>`;
+                statusElement.innerHTML += `<br><small>最后更新: ${new Date(report.timestamp).toLocaleString()}</small>`;
+                
+                // 显示问题和建议
+                if (report.issues.length > 0) {
+                    statusElement.innerHTML += '<br><strong>问题:</strong><ul>';
+                    report.issues.forEach(issue => {
+                        statusElement.innerHTML += `<li>${issue}</li>`;
+                    });
+                    statusElement.innerHTML += '</ul>';
+                }
+                
+                if (report.recommendations.length > 0) {
+                    statusElement.innerHTML += '<br><strong>建议:</strong><ul>';
+                    report.recommendations.forEach(rec => {
+                        statusElement.innerHTML += `<li>${rec}</li>`;
+                    });
+                    statusElement.innerHTML += '</ul>';
+                }
+                
+            } catch (error) {
+                document.getElementById('health-status').innerHTML = 
+                    '<span class="status-error">无法加载健康报告</span>';
+            }
+        }
+        
+        // 页面加载时执行
+        loadHealthReport();
+        
+        // 每30秒刷新一次
+        setInterval(loadHealthReport, 30000);
+    </script>
+</body>
+</html>

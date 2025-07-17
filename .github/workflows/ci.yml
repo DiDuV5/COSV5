@@ -1,0 +1,316 @@
+name: 🚀 CoserEden Enhanced CI/CD Pipeline
+
+on:
+  push:
+    branches: [ master, develop, 'feature/*', 'hotfix/*' ]
+  pull_request:
+    branches: [ master, develop ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8'
+
+jobs:
+  # 🔍 代码质量检查
+  quality-gate:
+    name: 🔍 Quality Gate
+    runs-on: ubuntu-latest
+    outputs:
+      should-deploy: ${{ steps.quality-check.outputs.should-deploy }}
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🔧 TypeScript type check
+        run: npm run type-check
+
+      - name: 🎨 ESLint check
+        run: npm run lint:check
+
+      - name: 💅 Prettier check
+        run: npm run format:check
+
+      - name: 🏗️ Build check
+        run: npm run build
+
+      - name: 📊 Quality metrics
+        id: quality-check
+        run: |
+          echo "🔍 Checking quality metrics..."
+
+          # 检查TypeScript错误数量
+          TS_ERRORS=$(npm run type-check 2>&1 | grep -c "error TS" || echo "0")
+          echo "TypeScript errors: $TS_ERRORS"
+
+          # 检查ESLint错误数量
+          LINT_ERRORS=$(npm run lint:check 2>&1 | grep -c "error" || echo "0")
+          echo "ESLint errors: $LINT_ERRORS"
+
+          # 设置质量门禁
+          if [ "$TS_ERRORS" -gt 50 ]; then
+            echo "❌ Too many TypeScript errors ($TS_ERRORS > 50)"
+            echo "should-deploy=false" >> $GITHUB_OUTPUT
+            exit 1
+          elif [ "$LINT_ERRORS" -gt 10 ]; then
+            echo "❌ Too many ESLint errors ($LINT_ERRORS > 10)"
+            echo "should-deploy=false" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "✅ Quality gate passed"
+            echo "should-deploy=true" >> $GITHUB_OUTPUT
+          fi
+
+  # 🧪 测试执行
+  test:
+    name: 🧪 Test Suite
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cosereeden_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🗄️ Setup test database
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cosereeden_test
+        run: |
+          npm run db:generate
+          npm run db:push
+
+      - name: 🧪 Run tests with coverage
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cosereeden_test
+          NODE_ENV: test
+        run: npm run test:ci
+
+      - name: 📊 Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+
+      - name: 📈 Coverage gate
+        run: |
+          COVERAGE=$(node -e "
+            const fs = require('fs');
+            const coverage = JSON.parse(fs.readFileSync('./coverage/coverage-summary.json'));
+            console.log(coverage.total.statements.pct);
+          ")
+          echo "Current coverage: $COVERAGE%"
+
+          if (( $(echo "$COVERAGE < 30" | bc -l) )); then
+            echo "❌ Coverage too low ($COVERAGE% < 30%)"
+            exit 1
+          else
+            echo "✅ Coverage gate passed ($COVERAGE%)"
+          fi
+
+  # 🔒 安全扫描
+  security:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 🔍 Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: 🔒 CodeQL Analysis
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript
+
+      - name: 🏗️ Autobuild
+        uses: github/codeql-action/autobuild@v2
+
+      - name: 🔍 Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+  # 🚀 部署到Staging
+  deploy-staging:
+    name: 🚀 Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [quality-gate, test, security]
+    if: |
+      needs.quality-gate.outputs.should-deploy == 'true' &&
+      (github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch')
+    environment:
+      name: staging
+      url: https://staging.tutu365.cc
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐳 Build Docker image
+        run: |
+          docker build -t cosereeden:staging .
+          docker tag cosereeden:staging cosereeden:staging-${{ github.sha }}
+
+      - name: 🚀 Deploy to staging server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            cd /opt/cosereeden-staging
+            git pull origin develop
+            docker-compose down
+            docker-compose up -d --build
+
+            # 健康检查
+            sleep 30
+            if curl -f http://localhost:3001/api/health; then
+              echo "✅ Staging deployment successful"
+            else
+              echo "❌ Staging deployment failed"
+              exit 1
+            fi
+
+  # 🚀 部署到Production
+  deploy-production:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [quality-gate, test, security]
+    if: |
+      needs.quality-gate.outputs.should-deploy == 'true' &&
+      github.ref == 'refs/heads/master' &&
+      github.event_name == 'push'
+    environment:
+      name: production
+      url: https://tutu365.cc
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Create release tag
+        run: |
+          TAG="v$(date +%Y%m%d-%H%M%S)"
+          git tag $TAG
+          git push origin $TAG
+          echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
+
+      - name: 🐳 Build production image
+        run: |
+          docker build -f Dockerfile -t cosereeden:production .
+          docker tag cosereeden:production cosereeden:${{ env.RELEASE_TAG }}
+
+      - name: 🚀 Blue-Green deployment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            cd /opt/cosereeden-production
+
+            # 备份当前版本
+            docker tag cosereeden:production cosereeden:backup-$(date +%Y%m%d-%H%M%S)
+
+            # 拉取最新代码
+            git pull origin master
+
+            # 构建新版本
+            docker-compose -f docker-compose.yml build
+
+            # 蓝绿部署
+            docker-compose -f docker-compose.yml up -d --scale app=2
+
+            # 健康检查
+            sleep 60
+            if curl -f https://tutu365.cc/api/health; then
+              echo "✅ Production deployment successful"
+              # 清理旧容器
+              docker-compose -f docker-compose.yml up -d --scale app=1
+            else
+              echo "❌ Production deployment failed, rolling back"
+              docker-compose -f docker-compose.yml down
+              docker tag cosereeden:backup-$(date +%Y%m%d-%H%M%S) cosereeden:production
+              docker-compose -f docker-compose.yml up -d
+              exit 1
+            fi
+
+  # 📊 部署后监控
+  post-deploy-monitoring:
+    name: 📊 Post-deployment Monitoring
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
+    steps:
+      - name: 🔍 Health check monitoring
+        run: |
+          if [ "${{ needs.deploy-production.result }}" == "success" ]; then
+            URL="https://tutu365.cc"
+          else
+            URL="https://staging.tutu365.cc"
+          fi
+
+          echo "Monitoring $URL for 5 minutes..."
+          for i in {1..10}; do
+            if curl -f $URL/api/health; then
+              echo "✅ Health check $i/10 passed"
+            else
+              echo "❌ Health check $i/10 failed"
+            fi
+            sleep 30
+          done
+
+      - name: 📢 Notify deployment status
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        if: always()

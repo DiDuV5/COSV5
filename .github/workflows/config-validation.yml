@@ -1,0 +1,56 @@
+name: 配置检查和验证
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  config-validation:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v3
+      
+    - name: 设置Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: 安装依赖
+      run: npm ci
+      
+    - name: 检查环境变量命名规范
+      run: npm run check:naming
+      
+    - name: 检查配置冲突
+      run: node scripts/analyze-config-conflicts.js
+      
+    - name: 检查配置优先级
+      run: node scripts/analyze-config-priority-conflicts.js
+      
+    - name: 检查模块配置一致性
+      run: node scripts/analyze-module-config-consistency.js
+      
+    - name: 验证配置完整性
+      run: node scripts/validate-config.js
+      
+    - name: 生成配置报告
+      run: |
+        echo "## 配置检查报告" >> $GITHUB_STEP_SUMMARY
+        echo "### 命名规范检查" >> $GITHUB_STEP_SUMMARY
+        npm run check:naming >> $GITHUB_STEP_SUMMARY || true
+        echo "### 配置冲突检查" >> $GITHUB_STEP_SUMMARY
+        node scripts/analyze-config-conflicts.js >> $GITHUB_STEP_SUMMARY || true
+      
+    - name: 配置检查失败时的处理
+      if: failure()
+      run: |
+        echo "❌ 配置检查失败，请修复以下问题："
+        echo "1. 运行 npm run check:naming 检查命名规范"
+        echo "2. 运行 npm run fix:naming 自动修复部分问题"
+        echo "3. 查看配置冲突分析报告"
+        exit 1

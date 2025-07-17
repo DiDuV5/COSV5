@@ -1,0 +1,88 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# Dependencies
+/node_modules
+/.pnpm-store
+
+# Build artifacts
+/.next/
+/out/
+/build
+/build.log
+/tsconfig.tsbuildinfo
+
+# Test coverage reports (can be regenerated)
+/coverage/
+coverage/
+*.lcov
+
+# Env
+.env*
+!/.env.example
+!.env.production.example
+!.env.development.example
+
+# Prisma
+# Ignore all database files and journals
+*.db
+*.db-journal
+
+# Ignore backups created by prisma or users
+prisma/*.backup.*
+prisma/schema.prisma.backup.*
+prisma/schema.prisma.sqlite.backup
+
+# Backups & Temp files
+/backup/
+/backups/
+/cleanup-backup-*/
+/config-backups/
+/temp/
+/tmp/
+*.log
+/logs/
+*.local
+*.old_*
+*.bak
+*.tmp
+*.temp
+*.cache
+*.swp
+*~
+.history/
+.vscode/.history/
+
+# OS-specific
+.DS_Store
+._*
+Thumbs.db
+
+# Media uploads
+/public/uploads/
+/public/uploads_old_*/
+
+# Reports and other generated files
+# Be specific to avoid ignoring important config files
+COMPREHENSIVE_AUDIT_REPORT.json
+r2-backup-*.json
+UPLOAD_SYSTEM_DIAGNOSIS_REPORT.md
+URGENT_FIX_SUMMARY.md
+URGENT_FIXES_COMPLETED_REPORT.md
+PHASE2_COMPLETION_SUMMARY.md
+database-cleanup.sql
+
+# Ignore specific backup files
+next.config.js.backup.*
+docs/user-approval-api-routes.ts.bak
+
+# Ignore prisma's production db files from root
+/prisma/production.db
+/prisma/prisma/
+
+# 环境变量文件
+.env.local
+production.env
+*.production.env
+# 配置备份文件
+*.env.backup.*
+config-backup-*

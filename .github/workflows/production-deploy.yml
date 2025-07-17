@@ -1,0 +1,434 @@
+name: CoserEden Production CI/CD
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: "强制部署（跳过测试）"
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: "18.20.8"
+  PNPM_VERSION: "8.15.6"
+  APP_NAME: "cosereeden"
+
+jobs:
+  # 代码质量检查和测试
+  quality-check:
+    name: 🧪 Quality Check & Tests
+    runs-on: ubuntu-latest
+    if: github.event.inputs.force_deploy != 'true'
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cosereeden_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 📦 Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: 🎯 Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: 🗄️ Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: 📥 Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: 🔍 TypeScript type check
+        run: pnpm run type-check
+
+      - name: 🧹 ESLint check
+        run: pnpm run lint
+
+      - name: 🏗️ Build test
+        run: pnpm run build
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cosereeden_test
+          REDIS_URL: redis://localhost:6379
+          NEXTAUTH_SECRET: test-secret-key-for-ci
+          NEXTAUTH_URL: http://localhost:3000
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+      - name: 🧪 Run unit tests
+        run: pnpm run test:ci
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cosereeden_test
+          REDIS_URL: redis://localhost:6379
+          NEXTAUTH_SECRET: test-secret-key-for-ci
+
+      - name: 📊 Upload test coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  # 构建生产版本
+  build-production:
+    name: 🏗️ Build Production
+    runs-on: ubuntu-latest
+    needs: quality-check
+    if: github.ref == 'refs/heads/main' && (success() || github.event.inputs.force_deploy == 'true')
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 📦 Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: 🎯 Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: 🗄️ Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: 📥 Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: 🏗️ Build production
+        run: pnpm run build
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_APP_URL: https://cosv5.com
+          NEXTAUTH_URL: https://cosv5.com
+
+      - name: 📦 Create deployment package
+        run: |
+          # 创建部署包目录
+          mkdir -p deploy-package
+
+          # 复制构建文件
+          cp -r .next deploy-package/
+          cp -r public deploy-package/
+          cp package.json deploy-package/
+          cp pnpm-lock.yaml deploy-package/
+          cp next.config.js deploy-package/
+
+          # 复制数据库相关文件
+          if [ -d "prisma" ]; then
+            cp -r prisma deploy-package/
+          fi
+
+          # 创建启动脚本
+          cat > deploy-package/server.js << 'EOF'
+          const { createServer } = require('http')
+          const { parse } = require('url')
+          const next = require('next')
+
+          const dev = process.env.NODE_ENV !== 'production'
+          const hostname = process.env.HOSTNAME || 'localhost'
+          const port = parseInt(process.env.PORT, 10) || 3000
+
+          const app = next({ dev, hostname, port })
+          const handle = app.getRequestHandler()
+
+          app.prepare().then(() => {
+            createServer(async (req, res) => {
+              try {
+                const parsedUrl = parse(req.url, true)
+                await handle(req, res, parsedUrl)
+              } catch (err) {
+                console.error('Error occurred handling', req.url, err)
+                res.statusCode = 500
+                res.end('internal server error')
+              }
+            })
+            .once('error', (err) => {
+              console.error(err)
+              process.exit(1)
+            })
+            .listen(port, () => {
+              console.log(`> Ready on http://${hostname}:${port}`)
+
+              // 通知PM2应用已准备就绪
+              if (process.send) {
+                process.send('ready')
+              }
+            })
+          })
+          EOF
+
+          # 创建健康检查API
+          mkdir -p deploy-package/pages/api
+          cat > deploy-package/pages/api/health.js << 'EOF'
+          export default function handler(req, res) {
+            res.status(200).json({
+              status: 'ok',
+              timestamp: new Date().toISOString(),
+              version: process.env.npm_package_version || '1.0.0',
+              uptime: process.uptime()
+            })
+          }
+          EOF
+
+          # 创建部署包
+          tar -czf deploy-package.tar.gz -C deploy-package .
+
+          # 显示包大小
+          ls -lh deploy-package.tar.gz
+
+      - name: 📤 Upload deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-deployment-${{ github.sha }}
+          path: deploy-package.tar.gz
+          retention-days: 7
+
+  # 部署到生产环境
+  deploy-production:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-production]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://cosv5.com
+
+    steps:
+      - name: 📥 Checkout deployment scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/
+          sparse-checkout-cone-mode: false
+
+      - name: 📥 Download deployment artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: production-deployment-${{ github.sha }}
+
+      - name: 🔑 Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 📤 Upload deployment package
+        run: |
+          scp -i ~/.ssh/deploy_key deploy-package.tar.gz ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/deploy-${{ github.sha }}.tar.gz
+
+      - name: 🚀 Execute deployment
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+            set -e
+
+            # 设置变量
+            APP_DIR="/var/www/cosereeden"
+            RELEASE_DIR="$APP_DIR/releases/$(date +%Y%m%d_%H%M%S)"
+            BACKUP_DIR="/var/backups/cosereeden"
+            DEPLOY_PACKAGE="/tmp/deploy-${{ github.sha }}.tar.gz"
+
+            echo "🚀 开始部署 CoserEden..."
+            echo "📦 版本: ${{ github.sha }}"
+            echo "📁 发布目录: $RELEASE_DIR"
+
+            # 创建发布目录
+            mkdir -p "$RELEASE_DIR"
+
+            # 解压部署包
+            echo "📤 解压部署包..."
+            tar -xzf "$DEPLOY_PACKAGE" -C "$RELEASE_DIR"
+
+            # 链接共享文件和目录
+            echo "🔗 链接共享资源..."
+            ln -sf "$APP_DIR/shared/.env.production" "$RELEASE_DIR/.env.production"
+            ln -sf "$APP_DIR/shared/uploads" "$RELEASE_DIR/public/uploads"
+
+            # 安装生产依赖
+            echo "📦 安装生产依赖..."
+            cd "$RELEASE_DIR"
+            npm ci --only=production --silent
+
+            # 运行数据库迁移
+            if [ -f "prisma/schema.prisma" ]; then
+              echo "🗄️ 运行数据库迁移..."
+              npx prisma generate
+              npx prisma migrate deploy
+            fi
+
+            # 备份当前版本
+            if [ -L "$APP_DIR/current" ]; then
+              CURRENT_RELEASE=$(readlink "$APP_DIR/current")
+              if [ -d "$CURRENT_RELEASE" ]; then
+                BACKUP_NAME="backup-$(date +%Y%m%d_%H%M%S)"
+                echo "💾 备份当前版本到: $BACKUP_DIR/$BACKUP_NAME"
+                mkdir -p "$BACKUP_DIR"
+                cp -r "$CURRENT_RELEASE" "$BACKUP_DIR/$BACKUP_NAME"
+              fi
+            fi
+
+            # 原子性切换版本
+            echo "🔄 切换到新版本..."
+            ln -sfn "$RELEASE_DIR" "$APP_DIR/current"
+
+            # 重启应用
+            echo "🔄 重启应用..."
+            cd "$APP_DIR/current"
+            pm2 startOrRestart "$APP_DIR/shared/ecosystem.config.js" --env production
+
+            # 等待应用启动
+            echo "⏳ 等待应用启动..."
+            sleep 15
+
+            # 健康检查
+            echo "🔍 执行健康检查..."
+            HEALTH_CHECK_PASSED=false
+            for i in {1..6}; do
+              if curl -f http://localhost:3000/api/health > /dev/null 2>&1; then
+                echo "✅ 健康检查通过 (尝试 $i/6)"
+                HEALTH_CHECK_PASSED=true
+                break
+              else
+                echo "⏳ 健康检查失败，等待重试... (尝试 $i/6)"
+                sleep 10
+              fi
+            done
+
+            if [ "$HEALTH_CHECK_PASSED" = true ]; then
+              echo "🎉 部署成功！"
+              pm2 save
+
+              # 清理旧版本（保留最近5个）
+              echo "🧹 清理旧版本..."
+              cd "$APP_DIR/releases"
+              ls -t | tail -n +6 | xargs -r rm -rf
+
+              # 清理旧备份（保留最近10个）
+              cd "$BACKUP_DIR"
+              ls -t | tail -n +11 | xargs -r rm -rf
+
+            else
+              echo "❌ 健康检查失败，开始回滚..."
+
+              # 回滚到上一个版本
+              if [ -d "$BACKUP_DIR" ]; then
+                LAST_BACKUP=$(ls -t "$BACKUP_DIR" | head -1)
+                if [ -n "$LAST_BACKUP" ]; then
+                  echo "🔄 回滚到版本: $LAST_BACKUP"
+                  ln -sfn "$BACKUP_DIR/$LAST_BACKUP" "$APP_DIR/current"
+                  pm2 restart cosereeden
+                  sleep 10
+
+                  # 验证回滚
+                  if curl -f http://localhost:3000/api/health > /dev/null 2>&1; then
+                    echo "✅ 回滚成功"
+                  else
+                    echo "❌ 回滚失败"
+                  fi
+                fi
+              fi
+
+              exit 1
+            fi
+
+            # 清理部署包
+            rm -f "$DEPLOY_PACKAGE"
+
+            echo "🎉 部署流程完成！"
+          EOF
+
+      - name: 🧹 Cleanup SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key
+
+      - name: 📱 Send success notification
+        if: success()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="HTML" \
+            -d text="🎉 <b>CoserEden 部署成功！</b>
+
+          🚀 <b>版本:</b> <code>${{ github.sha }}</code>
+          🌐 <b>环境:</b> Production
+          👤 <b>提交者:</b> ${{ github.actor }}
+          📝 <b>提交信息:</b> ${{ github.event.head_commit.message }}
+
+          🔗 <b>访问地址:</b>
+          • <a href='https://cosv5.com'>cosv5.com</a>
+          • <a href='https://cosv5.cc'>cosv5.cc</a>
+          • <a href='https://cosv5.vip'>cosv5.vip</a>
+
+          ⏰ <b>部署时间:</b> $(date '+%Y-%m-%d %H:%M:%S UTC')"
+
+      - name: 📱 Send failure notification
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="HTML" \
+            -d text="❌ <b>CoserEden 部署失败！</b>
+
+          🚀 <b>版本:</b> <code>${{ github.sha }}</code>
+          🌐 <b>环境:</b> Production
+          👤 <b>提交者:</b> ${{ github.actor }}
+          📝 <b>提交信息:</b> ${{ github.event.head_commit.message }}
+
+          🔗 <b>查看日志:</b> <a href='${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'>GitHub Actions</a>
+
+          ⚠️ <b>请立即检查并修复问题！</b>
+          ⏰ <b>失败时间:</b> $(date '+%Y-%m-%d %H:%M:%S UTC')"

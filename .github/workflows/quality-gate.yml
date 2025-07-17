@@ -1,0 +1,329 @@
+name: 🛡️ Quality Gate
+
+on:
+  pull_request:
+    branches: [master, develop]
+  push:
+    branches: [master, develop]
+
+env:
+  NODE_VERSION: "18"
+
+jobs:
+  # 🔍 代码质量分析
+  code-quality:
+    name: 🔍 Code Quality Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🔧 TypeScript strict check
+        id: typescript
+        run: |
+          echo "🔍 Running enhanced TypeScript check..."
+
+          # 运行我们的CI类型检查脚本
+          if ./scripts/ci-type-check.sh; then
+            echo "typescript-status=passed" >> $GITHUB_OUTPUT
+            echo "typescript-errors=0" >> $GITHUB_OUTPUT
+            echo "✅ TypeScript checks passed"
+          else
+            echo "typescript-status=failed" >> $GITHUB_OUTPUT
+
+            # 计算基础错误数量
+            TS_OUTPUT=$(npm run type-check 2>&1 || true)
+            TS_ERRORS=$(echo "$TS_OUTPUT" | grep -c "error TS" || echo "0")
+            echo "typescript-errors=$TS_ERRORS" >> $GITHUB_OUTPUT
+
+            echo "❌ TypeScript checks failed"
+            echo "Basic TypeScript errors: $TS_ERRORS"
+          fi
+
+      - name: 🎨 ESLint analysis
+        id: eslint
+        run: |
+          echo "🎨 Running ESLint..."
+          LINT_OUTPUT=$(npm run lint:check 2>&1 || true)
+          LINT_ERRORS=$(echo "$LINT_OUTPUT" | grep -c " error " || echo "0")
+          LINT_WARNINGS=$(echo "$LINT_OUTPUT" | grep -c " warning " || echo "0")
+
+          echo "eslint-errors=$LINT_ERRORS" >> $GITHUB_OUTPUT
+          echo "eslint-warnings=$LINT_WARNINGS" >> $GITHUB_OUTPUT
+          echo "ESLint errors: $LINT_ERRORS, warnings: $LINT_WARNINGS"
+
+          if [ "$LINT_ERRORS" -gt 0 ]; then
+            echo "❌ ESLint errors found"
+            echo "$LINT_OUTPUT"
+          else
+            echo "✅ No ESLint errors"
+          fi
+
+      - name: 💅 Prettier check
+        id: prettier
+        run: |
+          echo "💅 Running Prettier check..."
+          if npm run format:check; then
+            echo "✅ Code formatting is correct"
+            echo "prettier-status=passed" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Code formatting issues found"
+            echo "prettier-status=failed" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 📊 Generate quality report
+        run: |
+          cat << EOF > quality-report.md
+          # 📊 Enhanced Code Quality Report
+
+          ## 🔧 TypeScript Analysis
+          - **Basic Errors**: ${{ steps.typescript.outputs.typescript-errors }}
+          - **Strict Check**: ${{ steps.typescript.outputs.typescript-status == 'passed' && '✅ Passed' || '⚠️ Has warnings' }}
+          - **Overall Status**: ${{ steps.typescript.outputs.typescript-status == 'passed' && '✅ Passed' || '❌ Failed' }}
+
+          ## 🎨 ESLint Analysis
+          - **Errors**: ${{ steps.eslint.outputs.eslint-errors }}
+          - **Warnings**: ${{ steps.eslint.outputs.eslint-warnings }}
+          - **Status**: ${{ steps.eslint.outputs.eslint-errors == '0' && '✅ Passed' || '❌ Failed' }}
+
+          ## 💅 Code Formatting
+          - **Status**: ${{ steps.prettier.outputs.prettier-status == 'passed' && '✅ Passed' || '❌ Failed' }}
+
+          ## 📋 Type Safety Report
+          详细的类型检查报告已生成，请查看CI日志中的类型检查摘要。
+
+          ## 🎯 Quality Gate Status
+          ${{ steps.typescript.outputs.typescript-status == 'passed' && steps.eslint.outputs.eslint-errors == '0' && steps.prettier.outputs.prettier-status == 'passed' && '✅ **PASSED** - Ready for merge' || '❌ **FAILED** - Needs fixes before merge' }}
+          EOF
+
+      - name: 📝 Comment PR with quality report
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('quality-report.md', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
+
+      - name: 🚫 Fail if quality gate not met
+        run: |
+          TS_STATUS=${{ steps.typescript.outputs.typescript-status }}
+          TS_ERRORS=${{ steps.typescript.outputs.typescript-errors }}
+          LINT_ERRORS=${{ steps.eslint.outputs.eslint-errors }}
+          PRETTIER_STATUS=${{ steps.prettier.outputs.prettier-status }}
+
+          echo "📊 Quality Gate Results:"
+          echo "- TypeScript Status: $TS_STATUS"
+          echo "- TypeScript Errors: $TS_ERRORS"
+          echo "- ESLint Errors: $LINT_ERRORS"
+          echo "- Prettier Status: $PRETTIER_STATUS"
+
+          # 严格模式：基础TypeScript错误必须为0
+          if [ "$TS_ERRORS" -gt 0 ] || [ "$LINT_ERRORS" -gt 0 ] || [ "$PRETTIER_STATUS" != "passed" ]; then
+            echo "❌ Quality gate failed!"
+            echo "Critical issues found that must be fixed before merge."
+            exit 1
+          else
+            echo "✅ Quality gate passed!"
+            if [ "$TS_STATUS" != "passed" ]; then
+              echo "⚠️  Note: Strict TypeScript check has warnings, but basic checks passed."
+            fi
+          fi
+
+  # 🧪 测试覆盖率检查
+  test-coverage:
+    name: 🧪 Test Coverage Gate
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cosereeden_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🗄️ Setup test database
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cosereeden_test
+        run: |
+          npm run db:generate
+          npm run db:push
+
+      - name: 🧪 Run tests with coverage
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cosereeden_test
+          NODE_ENV: test
+        run: npm run test:coverage
+
+      - name: 📊 Coverage analysis
+        id: coverage
+        run: |
+          if [ -f "./coverage/coverage-summary.json" ]; then
+            STATEMENTS=$(node -e "console.log(JSON.parse(require('fs').readFileSync('./coverage/coverage-summary.json')).total.statements.pct)")
+            BRANCHES=$(node -e "console.log(JSON.parse(require('fs').readFileSync('./coverage/coverage-summary.json')).total.branches.pct)")
+            FUNCTIONS=$(node -e "console.log(JSON.parse(require('fs').readFileSync('./coverage/coverage-summary.json')).total.functions.pct)")
+            LINES=$(node -e "console.log(JSON.parse(require('fs').readFileSync('./coverage/coverage-summary.json')).total.lines.pct)")
+
+            echo "statements-coverage=$STATEMENTS" >> $GITHUB_OUTPUT
+            echo "branches-coverage=$BRANCHES" >> $GITHUB_OUTPUT
+            echo "functions-coverage=$FUNCTIONS" >> $GITHUB_OUTPUT
+            echo "lines-coverage=$LINES" >> $GITHUB_OUTPUT
+
+            echo "Coverage: Statements $STATEMENTS%, Branches $BRANCHES%, Functions $FUNCTIONS%, Lines $LINES%"
+          else
+            echo "❌ Coverage report not found"
+            exit 1
+          fi
+
+      - name: 📈 Coverage gate check
+        run: |
+          STATEMENTS=${{ steps.coverage.outputs.statements-coverage }}
+          BRANCHES=${{ steps.coverage.outputs.branches-coverage }}
+          FUNCTIONS=${{ steps.coverage.outputs.functions-coverage }}
+          LINES=${{ steps.coverage.outputs.lines-coverage }}
+
+          # 设置最低覆盖率要求（逐步提升）
+          MIN_STATEMENTS=30
+          MIN_BRANCHES=25
+          MIN_FUNCTIONS=30
+          MIN_LINES=30
+
+          FAILED=false
+
+          if (( $(echo "$STATEMENTS < $MIN_STATEMENTS" | bc -l) )); then
+            echo "❌ Statements coverage too low: $STATEMENTS% < $MIN_STATEMENTS%"
+            FAILED=true
+          fi
+
+          if (( $(echo "$BRANCHES < $MIN_BRANCHES" | bc -l) )); then
+            echo "❌ Branches coverage too low: $BRANCHES% < $MIN_BRANCHES%"
+            FAILED=true
+          fi
+
+          if (( $(echo "$FUNCTIONS < $MIN_FUNCTIONS" | bc -l) )); then
+            echo "❌ Functions coverage too low: $FUNCTIONS% < $MIN_FUNCTIONS%"
+            FAILED=true
+          fi
+
+          if (( $(echo "$LINES < $MIN_LINES" | bc -l) )); then
+            echo "❌ Lines coverage too low: $LINES% < $MIN_LINES%"
+            FAILED=true
+          fi
+
+          if [ "$FAILED" = true ]; then
+            echo "❌ Coverage gate failed!"
+            exit 1
+          else
+            echo "✅ Coverage gate passed!"
+          fi
+
+      - name: 📊 Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+
+  # 🔒 安全检查
+  security-check:
+    name: 🔒 Security Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Audit dependencies
+        run: |
+          echo "🔍 Running npm audit..."
+          if npm audit --audit-level=high; then
+            echo "✅ No high-severity vulnerabilities found"
+          else
+            echo "❌ High-severity vulnerabilities found"
+            npm audit --audit-level=high
+            exit 1
+          fi
+
+      - name: 🔒 Check for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+
+  # 📋 质量门禁总结
+  quality-gate-summary:
+    name: 📋 Quality Gate Summary
+    runs-on: ubuntu-latest
+    needs: [code-quality, test-coverage, security-check]
+    if: always()
+    steps:
+      - name: 📊 Generate summary
+        run: |
+          echo "# 🛡️ Quality Gate Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Code Quality | ${{ needs.code-quality.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Coverage | ${{ needs.test-coverage.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Check | ${{ needs.security-check.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.code-quality.result }}" == "success" ] && [ "${{ needs.test-coverage.result }}" == "success" ] && [ "${{ needs.security-check.result }}" == "success" ]; then
+            echo "## 🎉 All quality gates passed! Ready for merge." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ❌ Quality gate failed. Please fix the issues before merging." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: 🚫 Fail if any gate failed
+        run: |
+          if [ "${{ needs.code-quality.result }}" != "success" ] || [ "${{ needs.test-coverage.result }}" != "success" ] || [ "${{ needs.security-check.result }}" != "success" ]; then
+            echo "❌ Quality gate failed!"
+            exit 1
+          else
+            echo "✅ All quality gates passed!"
+          fi

@@ -1,0 +1,36 @@
+name: AI Audit
+on:
+  pull_request: {}
+  schedule:
+    - cron: "0 2 * * *"
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm install -g lighthouse-ci
+      
+      - name: Run AI audit
+        run: npm run ai-audit:full
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      
+      - name: Commit Reports
+        if: github.event_name == 'schedule'
+        run: |
+          git config user.email "bot@example.com"
+          git config user.name "AI-Audit-Bot"
+          git add "AI 项目报告"
+          git commit -m "chore(bot): update AI audit reports" || echo "no changes"
+          git push || true 

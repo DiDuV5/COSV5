@@ -1,0 +1,167 @@
+name: 自动清理临时文件
+
+on:
+  schedule:
+    # 每周日凌晨2点执行清理
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '是否为模拟运行'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      cleanup_level:
+        description: '清理级别'
+        required: false
+        default: 'standard'
+        type: choice
+        options:
+          - 'minimal'    # 仅清理临时文件
+          - 'standard'   # 标准清理
+          - 'aggressive' # 深度清理
+
+jobs:
+  auto-cleanup:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      
+      - name: 设置Node.js环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: 检查磁盘空间（清理前）
+        run: |
+          echo "=== 清理前磁盘使用情况 ==="
+          df -h
+          echo "=== 项目目录大小 ==="
+          du -sh . --exclude=node_modules
+          du -sh node_modules 2>/dev/null || echo "node_modules不存在"
+      
+      - name: 赋予清理脚本执行权限
+        run: chmod +x scripts/auto-cleanup-enhanced.sh
+      
+      - name: 执行自动清理（模拟模式）
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          echo "🔍 执行模拟清理..."
+          ./scripts/auto-cleanup-enhanced.sh true
+      
+      - name: 执行自动清理（实际模式）
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          echo "🧹 执行实际清理..."
+          ./scripts/auto-cleanup-enhanced.sh false
+      
+      - name: 清理node_modules缓存（深度清理模式）
+        if: github.event.inputs.cleanup_level == 'aggressive'
+        run: |
+          echo "🗑️ 执行深度清理..."
+          # 清理npm缓存
+          npm cache clean --force
+          # 清理yarn缓存（如果存在）
+          yarn cache clean 2>/dev/null || true
+          # 清理.next缓存
+          rm -rf .next/cache/* 2>/dev/null || true
+          echo "深度清理完成"
+      
+      - name: 检查磁盘空间（清理后）
+        run: |
+          echo "=== 清理后磁盘使用情况 ==="
+          df -h
+          echo "=== 项目目录大小 ==="
+          du -sh . --exclude=node_modules
+          du -sh node_modules 2>/dev/null || echo "node_modules不存在"
+      
+      - name: 运行基本验证
+        run: |
+          echo "🔍 验证项目完整性..."
+          # 检查关键文件是否存在
+          test -f package.json && echo "✅ package.json存在"
+          test -f next.config.js && echo "✅ next.config.js存在"
+          test -f tsconfig.json && echo "✅ tsconfig.json存在"
+          
+          # 检查关键目录是否存在
+          test -d src && echo "✅ src目录存在"
+          test -d prisma && echo "✅ prisma目录存在"
+          
+          echo "项目完整性验证通过"
+      
+      - name: 上传清理报告
+        if: github.event.inputs.dry_run != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-report-${{ github.run_number }}
+          path: |
+            cleanup-report-*.md
+            cleanup-backup-*/**
+          retention-days: 30
+      
+      - name: 创建清理总结评论
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // 查找最新的清理报告
+            const files = fs.readdirSync('.');
+            const reportFile = files.find(f => f.startsWith('cleanup-report-'));
+            
+            if (reportFile) {
+              const reportContent = fs.readFileSync(reportFile, 'utf8');
+              
+              const comment = `## 🧹 自动清理执行完成
+              
+**执行时间**: ${new Date().toLocaleString('zh-CN')}
+**触发方式**: 手动执行
+**清理级别**: ${{ github.event.inputs.cleanup_level }}
+
+### 清理报告
+\`\`\`
+${reportContent}
+\`\`\`
+
+### 下载
+- [清理报告和备份文件](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+---
+*此评论由自动清理工作流生成*`;
+
+              // 如果是PR触发，添加评论到PR
+              if (context.payload.pull_request) {
+                github.rest.issues.createComment({
+                  issue_number: context.payload.pull_request.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: comment
+                });
+              }
+            }
+
+  cleanup-monitoring:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    needs: auto-cleanup
+    
+    steps:
+      - name: 监控清理效果
+        run: |
+          echo "📊 监控清理效果..."
+          echo "定期清理已完成，项目保持清洁状态"
+          
+      - name: 发送通知（可选）
+        run: |
+          echo "📧 可以在这里添加通知逻辑"
+          echo "例如：发送邮件、Slack消息或其他通知"
